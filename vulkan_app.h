@@ -187,7 +187,7 @@ private:
         4, 5, 6, 6, 7, 4
     };
 
-    VkDescriptorPool descriptorPool;
+    VkDescriptorPool descriptor_pool_;
 
     std::vector<VkCommandBuffer> commandBuffers;
 
@@ -460,6 +460,7 @@ private:
     // offscreen =================================================
     AppOffscreenPipelineAssets offscreen_;
     void prepareOffscreen();
+    void createOffscreenUniformBuffer();
     void createOffscreenDescriptorSetLayout();
     void createOffscreenPipelineLayout();
     void createOffscreenRenderPass();
@@ -471,8 +472,10 @@ private:
     std::vector<AppSceneObject> scene_objects_;
     void prepareSceneObjects();
     void loadSceneObjectMesh(AppSceneObject& scene_object);
-    void loadSceneObjectTexture(AppSceneObject& scene_object);
+    void loadAllSceneObjectTexture(AppSceneObject& scene_object);
     void loadSingleSceneObjectTexture(AppTextureInfo& texture);
+    void createModelMatrixUniformBuffer(AppSceneObject& scene_object);
+    void createSceneObjectDescriptorSet(AppSceneObject& scene_object);
 };
 
 

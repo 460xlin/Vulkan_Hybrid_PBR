@@ -3,6 +3,13 @@
 #include <GLFW/glfw3.h>
 #include <string>
 
+struct AppUniformBuffer {
+    VkBuffer buffer;
+    VkDeviceMemory deviceMemory;
+    VkDescriptorBufferInfo descriptorBufferInfo;
+};
+
+
 struct AppTexture
 {
     VkImage image;
@@ -10,12 +17,6 @@ struct AppTexture
     VkImageView imageView;
     VkSampler sampler;
     VkDescriptorImageInfo descriptorImageInfo;
-};
-
-struct AppUniformBuffer {
-    VkBuffer buffer;
-    VkDeviceMemory deviceMemory;
-    VkDescriptorBufferInfo descriptorBufferInfo;
 };
 
 struct AppFramebufferAttachment {
@@ -29,12 +30,15 @@ struct AppTextureInfo {
     AppTexture texture;
 };
 
+struct AppSceneObjectUniformBufferConent {
+    glm::mat4 modelMatrix;
+};
+
 struct AppSceneObject {
     
     std::string meshPath;
     uint32_t vertexCount;
     uint32_t indexCount;
-
 
     struct {
         VkBuffer buffer;
@@ -44,7 +48,11 @@ struct AppSceneObject {
     AppTextureInfo albedo, normal, mrao;
 
     VkDescriptorSet descriptorSet;
-    AppUniformBuffer modelMatrixBuffer;
+
+    struct {
+        AppUniformBuffer uniformBuffer;
+        AppSceneObjectUniformBufferConent content;
+    } uniformBufferAndContent; 
 };
 
 struct AppDeferredPipelineAssets {
@@ -59,13 +67,23 @@ struct AppDeferredPipelineAssets {
     // add a framebuffer to store image output
 };
 
+struct AppOffscreenUniformBufferContent {
+    glm::mat4 projMatrix;
+    glm::mat4 viewMatrix;
+
+};
+
 struct AppOffscreenPipelineAssets {
     VkPipeline pipeline;
     VkPipelineLayout pipelineLayout;
     VkRenderPass renderPass;
     VkDescriptorSetLayout descriptorSetLayout;
     VkCommandBuffer commandBuffer;
-    AppUniformBuffer cameraUniformBuffer;
+
+    struct {
+        AppOffscreenUniformBufferContent content;
+        AppUniformBuffer uniformBuffer;
+    } uniformBufferAndContent;
 
     struct {
         VkFramebuffer frameBuffer;
@@ -74,20 +92,6 @@ struct AppOffscreenPipelineAssets {
     } frameBufferAssets;
 };
 
-//
-//    VkDescriptorSetLayoutBinding createDescriptorSetLayoutBinding(uint32_t binding,
-//        VkDescriptorType descriptorType,
-//        uint32_t descriptorCount,
-//        VkShaderStageFlags stageFlags) {
-//        VkDescriptorSetLayoutBinding layoutBinding = {};
-//        layoutBinding.binding = binding;
-//        layoutBinding.descriptorType = descriptorType;
-//        layoutBinding.descriptorCount = descriptorCount;
-//        layoutBinding.stageFlags = stageFlags;
-//        layoutBinding.pImmutableSamplers = nullptr;
-//        return layoutBinding;
-//    }
-//}
 namespace apputil {
     VkDescriptorSetLayoutBinding createDescriptorSetLayoutBinding(
         uint32_t binding,
@@ -99,6 +103,20 @@ namespace apputil {
         VkPipelineInputAssemblyStateCreateFlags flags,
         VkPrimitiveTopology topology,
         VkBool32 primitiveRestartEnable);
+
+    VkWriteDescriptorSet createBufferWriteDescriptorSet(
+        VkDescriptorSet dstSet,
+        VkDescriptorType descriptorType,
+        uint32_t dstBinding,
+        const VkDescriptorBufferInfo* pBufferInfo,
+        uint32_t descriptorCount);
+
+    VkWriteDescriptorSet createImageWriteDescriptorSet(
+        VkDescriptorSet dstSet,
+        VkDescriptorType descriptorType,
+        uint32_t dstBinding,
+        const VkDescriptorImageInfo* pBuffepImageInforInfo,
+        uint32_t descriptorCount);
 }
 
 

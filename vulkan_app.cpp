@@ -281,7 +281,7 @@ void VulkanApp::cleanup() {
     }
     
 
-    vkDestroyDescriptorPool(device_, descriptorPool, nullptr);
+    vkDestroyDescriptorPool(device_, descriptor_pool_, nullptr);
 
     vkDestroyDescriptorSetLayout(device_, descriptor_set_layout_, nullptr);
 
@@ -1726,11 +1726,7 @@ void VulkanApp::createUniformBuffers() {
         uniformBuffers.vsFullScreen.buffer, uniformBuffers.vsFullScreen.deviceMem
     );
     
-    // to do // model matrix, not just update camera ubo
-    createBuffer(deferredBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        offscreen_.cameraUniformBuffer.buffer, offscreen_.cameraUniformBuffer.deviceMemory
-    );
+    
 
     VkDeviceSize rtBufferSize = sizeof(RTUniformBufferObject);
     createBuffer(rtBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -1760,7 +1756,7 @@ void VulkanApp::createDescriptorPool() {
     poolInfo.maxSets = 20;
 
 
-    if (vkCreateDescriptorPool(device_, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+    if (vkCreateDescriptorPool(device_, &poolInfo, nullptr, &descriptor_pool_) != VK_SUCCESS) {
         throw std::runtime_error("failed to create descriptor pool!");
     }
 }
@@ -1771,7 +1767,7 @@ void VulkanApp::createDescriptorSets() {
     std::vector<VkWriteDescriptorSet> writeDescriptorSets;
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = descriptorPool;
+    allocInfo.descriptorPool = descriptor_pool_;
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts = &descriptor_set_layout_;
 
@@ -1861,86 +1857,85 @@ void VulkanApp::createDescriptorSets() {
 
 
     // for mrt shaders and it is for off screen rendering
-    for (int i = 0; i < models.size(); ++i) {
-        ModelVertexIndexTextureBuffer& curModel = models[i];
+    //for (int i = 0; i < models.size(); ++i) {
+    //    ModelVertexIndexTextureBuffer& curModel = models[i];
+
+    //    if (vkAllocateDescriptorSets(device_, &allocInfo, &curModel.descriptorSet) != VK_SUCCESS)
+    //    {
+    //        throw std::runtime_error("failed to allocate modelDesctiptorSets.model_1");
+    //    }
+
+
+    //    VkDescriptorBufferInfo temp{};
+    //    temp.buffer = offscreen_.cameraUniformBuffer.buffer;
+    //    temp.offset = 0;
+    //    temp.range = VK_WHOLE_SIZE;
+
+    //    VkDescriptorImageInfo model_1_albebo = {};
+    //    model_1_albebo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    //    model_1_albebo.sampler = colorSampler;
+    //    model_1_albebo.imageView = curModel.albedoTexture.textureImageView;
+
+    //    VkDescriptorImageInfo model_1_normal = {};
+    //    model_1_normal.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    //    model_1_normal.sampler = curModel.normalMapTexture.textureSampler;
+    //    model_1_normal.imageView = curModel.normalMapTexture.textureImageView;
+
+    //    
+
+    //    offscreen_.cameraUniformBuffer.descriptorBufferInfo.buffer = offscreen_.cameraUniformBuffer.buffer;
+    //    offscreen_.cameraUniformBuffer.descriptorBufferInfo.offset = 0;
+    //    offscreen_.cameraUniformBuffer.descriptorBufferInfo.range = VK_WHOLE_SIZE;
 
 
 
 
-        VkDescriptorBufferInfo temp{};
-        temp.buffer = offscreen_.cameraUniformBuffer.buffer;
-        temp.offset = 0;
-        temp.range = VK_WHOLE_SIZE;
+    //    VkWriteDescriptorSet model_writeDesSet{};
+    //    model_writeDesSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    //    model_writeDesSet.dstSet = curModel.descriptorSet;
+    //    model_writeDesSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    //    model_writeDesSet.dstBinding = 0;
+    //    model_writeDesSet.pBufferInfo = &offscreen_.cameraUniformBuffer.descriptorBufferInfo;
+    //    model_writeDesSet.descriptorCount = 1;
 
-        VkDescriptorImageInfo model_1_albebo = {};
-        model_1_albebo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        model_1_albebo.sampler = colorSampler;
-        model_1_albebo.imageView = curModel.albedoTexture.textureImageView;
+    //    // todo: match new descriptor layout 
+    //    VkWriteDescriptorSet tempWrite{};
+    //    tempWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    //    tempWrite.dstSet = curModel.descriptorSet;
+    //    tempWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    //    tempWrite.dstBinding = 0;
+    //    tempWrite.pBufferInfo = &temp;
+    //    tempWrite.descriptorCount = 1;
 
-        VkDescriptorImageInfo model_1_normal = {};
-        model_1_normal.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        model_1_normal.sampler = curModel.normalMapTexture.textureSampler;
-        model_1_normal.imageView = curModel.normalMapTexture.textureImageView;
+    //    VkWriteDescriptorSet model_albedoWriteDesSet{};
+    //    model_albedoWriteDesSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    //    model_albedoWriteDesSet.dstSet = curModel.descriptorSet;
+    //    model_albedoWriteDesSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    //    model_albedoWriteDesSet.dstBinding = 1;
+    //    model_albedoWriteDesSet.pImageInfo = &model_1_albebo;
+    //    model_albedoWriteDesSet.descriptorCount = 1;
 
-        if (vkAllocateDescriptorSets(device_, &allocInfo, &curModel.descriptorSet) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to allocate modelDesctiptorSets.model_1");
-        }
+    //    VkWriteDescriptorSet model_normalWriteDesSet{};
+    //    model_normalWriteDesSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    //    model_normalWriteDesSet.dstSet = curModel.descriptorSet;
+    //    model_normalWriteDesSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    //    model_normalWriteDesSet.dstBinding = 2;
+    //    model_normalWriteDesSet.pImageInfo = &model_1_normal;
+    //    model_normalWriteDesSet.descriptorCount = 1;
 
-        offscreen_.cameraUniformBuffer.descriptorBufferInfo.buffer = offscreen_.cameraUniformBuffer.buffer;
-        offscreen_.cameraUniformBuffer.descriptorBufferInfo.offset = 0;
-        offscreen_.cameraUniformBuffer.descriptorBufferInfo.range = VK_WHOLE_SIZE;
+    //    // those are zero
+    //    std::cout << "color-------------" << std::endl;
+    //    std::cout << model_1_albebo.imageView << std::endl;
+    //    std::cout << "nor---------------" << std::endl;
+    //    std::cout << model_1_normal.imageView << std::endl;
 
+    //    std::vector<VkWriteDescriptorSet> model_writeDescriptorSets 
+    //    { model_writeDesSet, tempWrite, model_albedoWriteDesSet, model_normalWriteDesSet };
 
-
-
-        VkWriteDescriptorSet model_writeDesSet{};
-        model_writeDesSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        model_writeDesSet.dstSet = curModel.descriptorSet;
-        model_writeDesSet.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        model_writeDesSet.dstBinding = 0;
-        model_writeDesSet.pBufferInfo = &offscreen_.cameraUniformBuffer.descriptorBufferInfo;
-        model_writeDesSet.descriptorCount = 1;
-
-        // todo: match new descriptor layout 
-        VkWriteDescriptorSet tempWrite{};
-        tempWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        tempWrite.dstSet = curModel.descriptorSet;
-        tempWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        tempWrite.dstBinding = 0;
-        tempWrite.pBufferInfo = &temp;
-        tempWrite.descriptorCount = 1;
-
-        VkWriteDescriptorSet model_albedoWriteDesSet{};
-        model_albedoWriteDesSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        model_albedoWriteDesSet.dstSet = curModel.descriptorSet;
-        model_albedoWriteDesSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        model_albedoWriteDesSet.dstBinding = 1;
-        model_albedoWriteDesSet.pImageInfo = &model_1_albebo;
-        model_albedoWriteDesSet.descriptorCount = 1;
-
-        VkWriteDescriptorSet model_normalWriteDesSet{};
-        model_normalWriteDesSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        model_normalWriteDesSet.dstSet = curModel.descriptorSet;
-        model_normalWriteDesSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        model_normalWriteDesSet.dstBinding = 2;
-        model_normalWriteDesSet.pImageInfo = &model_1_normal;
-        model_normalWriteDesSet.descriptorCount = 1;
-
-        // those are zero
-        std::cout << "color-------------" << std::endl;
-        std::cout << model_1_albebo.imageView << std::endl;
-        std::cout << "nor---------------" << std::endl;
-        std::cout << model_1_normal.imageView << std::endl;
-
-        std::vector<VkWriteDescriptorSet> model_writeDescriptorSets 
-        { model_writeDesSet, tempWrite, model_albedoWriteDesSet, model_normalWriteDesSet };
-
-        //model_writeDescriptorSets = { model_writeDesSet, model_albedoWriteDesSet, model_normalWriteDesSet };
-        vkUpdateDescriptorSets(device_, static_cast<uint32_t>(model_writeDescriptorSets.size()),
-            model_writeDescriptorSets.data(), 0, NULL);
-    }
-
+    //    //model_writeDescriptorSets = { model_writeDesSet, model_albedoWriteDesSet, model_normalWriteDesSet };
+    //    vkUpdateDescriptorSets(device_, static_cast<uint32_t>(model_writeDescriptorSets.size()),
+    //        model_writeDescriptorSets.data(), 0, NULL);
+    //}
 
     // TODO: for ray tracing
 }
@@ -2275,9 +2270,11 @@ void VulkanApp::updateUniformBuffer(uint32_t currentImage, glm::mat4 modelMatrix
 
     // vs off screen uniform buffer data update
     void* offScreenData;
-    vkMapMemory(device_, offscreen_.cameraUniformBuffer.deviceMemory, 0, sizeof(ubo), 0, &offScreenData);
+    vkMapMemory(device_,
+        offscreen_.uniformBufferAndContent.uniformBuffer.deviceMemory,
+        0, sizeof(ubo), 0, &offScreenData);
     memcpy(offScreenData, &ubo, sizeof(ubo));
-    vkUnmapMemory(device_, offscreen_.cameraUniformBuffer.deviceMemory);
+    vkUnmapMemory(device_, offscreen_.uniformBufferAndContent.uniformBuffer.deviceMemory);
 }
 
 
@@ -3126,7 +3123,7 @@ void VulkanApp::rt_graphics_setupDescriptorSet()
 {
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = descriptorPool;
+    allocInfo.descriptorPool = descriptor_pool_;
     allocInfo.pSetLayouts = &graphics.rt_descriptorSetLayout;
     // allocInfo.pSetLayouts = &descriptorSetLayout;
     allocInfo.descriptorSetCount = 1;
@@ -3227,7 +3224,7 @@ void VulkanApp::rt_prepareCompute() {
 
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = descriptorPool;
+    allocInfo.descriptorPool = descriptor_pool_;
     allocInfo.pSetLayouts = &compute.rt_computeDescriptorSetLayout;
     allocInfo.descriptorSetCount = 1;
 
@@ -3514,11 +3511,29 @@ void VulkanApp::rt_createComputeCommandBuffer() {
 
 void VulkanApp::prepareOffscreen() {
     createOffscreenDescriptorSetLayout();
+    createOffscreenUniformBuffer();
     createOffscreenPipelineLayout();
     createOffscreenRenderPass();
     createOffscreenFrameBuffer();
     createOffscreenPipeline();
     createOffscreenCommandBuffer();
+}
+
+void VulkanApp::createOffscreenUniformBuffer() {
+    VkDeviceSize bufferSize = sizeof(AppOffscreenUniformBufferContent);
+    createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        offscreen_.uniformBufferAndContent.uniformBuffer.buffer,
+        offscreen_.uniformBufferAndContent.uniformBuffer.deviceMemory
+    );
+
+    VkDescriptorBufferInfo& buffer_info =
+        offscreen_.uniformBufferAndContent.uniformBuffer.descriptorBufferInfo;
+
+    buffer_info.buffer =
+        offscreen_.uniformBufferAndContent.uniformBuffer.buffer;
+    buffer_info.offset = 0;
+    buffer_info.range = VK_WHOLE_SIZE;
 }
 
 void VulkanApp::createOffscreenDescriptorSetLayout() {
@@ -3986,8 +4001,7 @@ void VulkanApp::prepareSceneObjects() {
         loadSingleSceneObjectTexture(scene_object.normal);
         loadSingleSceneObjectTexture(scene_object.mrao);
         // allocate descriptor
-
-
+        createSceneObjectDescriptorSet(scene_object);
     }
 }
 
@@ -4141,7 +4155,7 @@ void VulkanApp::loadAllSceneObjectTexture(AppSceneObject& scene_object) {
 }
 
 void VulkanApp::loadSingleSceneObjectTexture(AppTextureInfo& texture_info) {
-    // -------------- mrao --------------
+    // load file
     int texWidth, texHeight, texChannels;
     stbi_uc* pixels = stbi_load(texture_info.path.c_str(),
         &texWidth, &texHeight, &texChannels,
@@ -4188,7 +4202,114 @@ void VulkanApp::loadSingleSceneObjectTexture(AppTextureInfo& texture_info) {
         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     vkDestroyBuffer(device_, stagingBuffer, nullptr);
     vkFreeMemory(device_, stagingBufferMemory, nullptr);
+
+    // create sampler
+    VkSamplerCreateInfo samplerInfo = {};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.anisotropyEnable = VK_TRUE;
+    samplerInfo.maxAnisotropy = 16;
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+    if (vkCreateSampler(device_, &samplerInfo, nullptr,
+        &texture_info.texture.sampler) != VK_SUCCESS) {
+        throw std::runtime_error(
+            "failed to create texture_info.texture.sampler!");
+    }
+
+    // fill image info
+    VkDescriptorImageInfo& image_info =
+        texture_info.texture.descriptorImageInfo;
+    image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    image_info.sampler = texture_info.texture.sampler;
+    image_info.imageView = texture_info.texture.imageView;
 }
+
+void VulkanApp::createSceneObjectDescriptorSet(AppSceneObject& scene_object) {
+    VkDescriptorSetAllocateInfo allocInfo = {};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = descriptor_pool_;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &descriptor_set_layout_;
+
+    if (vkAllocateDescriptorSets(device_, &allocInfo,
+        &scene_object.descriptorSet) != VK_SUCCESS)
+    {
+        throw std::runtime_error(
+            "failed to allocate scene_object.descriptorSet");
+    }
+
+    std::vector<VkWriteDescriptorSet> write_sets = {
+        // binding 0: offscreen uniformBuffer
+        apputil::createBufferWriteDescriptorSet(
+            scene_object.descriptorSet,
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            0,
+            &offscreen_.uniformBufferAndContent.uniformBuffer
+                .descriptorBufferInfo,
+            1),
+        // binding 1: self uniformBuffer
+        apputil::createBufferWriteDescriptorSet(
+            scene_object.descriptorSet,
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            1,
+            &scene_object.uniformBufferAndContent.uniformBuffer
+                .descriptorBufferInfo,
+            1),
+        // binding 2: albedo texture
+        apputil::createImageWriteDescriptorSet(
+            scene_object.descriptorSet,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            2,
+            &scene_object.albedo.texture.descriptorImageInfo,
+            1),
+        // binding 3: normal map
+        apputil::createImageWriteDescriptorSet(
+            scene_object.descriptorSet,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            3,
+            &scene_object.normal.texture.descriptorImageInfo,
+            1),
+        // binding 4: mrao texture
+        apputil::createImageWriteDescriptorSet(
+            scene_object.descriptorSet,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            4,
+            &scene_object.mrao.texture.descriptorImageInfo,
+            1)
+    };
+
+    vkUpdateDescriptorSets(device_, static_cast<uint32_t>(write_sets.size()),
+        write_sets.data(), 0, NULL);
+}
+
+void VulkanApp::createModelMatrixUniformBuffer(AppSceneObject& scene_object) {
+    
+    VkDeviceSize buffSize = sizeof(AppSceneObjectUniformBufferConent);
+    createBuffer(buffSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        scene_object.uniformBufferAndContent.uniformBuffer.buffer,
+        scene_object.uniformBufferAndContent.uniformBuffer.deviceMemory
+    );
+
+    VkDescriptorBufferInfo& buffer_info =
+        scene_object.uniformBufferAndContent.uniformBuffer.descriptorBufferInfo;
+    
+    buffer_info.buffer =
+        scene_object.uniformBufferAndContent.uniformBuffer.buffer;
+    buffer_info.offset = 0;
+    buffer_info.range = VK_WHOLE_SIZE;
+
+    scene_object.uniformBufferAndContent.content.modelMatrix = glm::mat4(1.f);
+}   
 
 
 
