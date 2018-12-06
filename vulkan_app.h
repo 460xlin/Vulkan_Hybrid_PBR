@@ -25,6 +25,7 @@
 #include <array>
 #include <unordered_map>
 #include "camera.h"
+#include "app_util.h"
 
 const int WIDTH = 800;
 const int HEIGHT = 600;
@@ -140,43 +141,33 @@ public:
     void run();
 
 private:
-    GLFWwindow* window;
+    GLFWwindow* window_;
 
-    VkInstance instance;
-    VkDebugUtilsMessengerEXT callback;
-    VkSurfaceKHR surface;
+    VkInstance instance_;
+    VkDebugUtilsMessengerEXT callback_;
+    VkSurfaceKHR surface_;
 
-    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-    VkDevice device;
+    VkPhysicalDevice physical_device_ = VK_NULL_HANDLE;
+    VkDevice device_;
 
-    VkQueue graphicsQueue;
-    // VkQueue presentQueue;
+    VkQueue queue_;
 
-    VkSwapchainKHR swapChain;
-    std::vector<VkImage> swapChainImages;
-    VkFormat swapChainImageFormat;
-    VkExtent2D swapChainExtent;
-    std::vector<VkImageView> swapChainImageViews;
-    std::vector<VkFramebuffer> swapChainFramebuffers;
+    VkSwapchainKHR swapchain_;
+    std::vector<VkImage> swapchain_images_;
+    VkFormat swapchain_imageformat_;
+    VkExtent2D swapchain_extent_;
+    std::vector<VkImageView> swapchain_imageviews_;
+    std::vector<VkFramebuffer> swapchain_framebuffers_;
 
-    VkRenderPass deferredRenderPass;
-    VkDescriptorSetLayout descriptorSetLayout;
-    // TODO
-    //VkPipelineLayout pipelineLayout;
-    //VkPipeline graphicsPipeline;
+    VkRenderPass deferred_renderpass_;
+    VkDescriptorSetLayout descriptor_set_layout_;
 
-    VkCommandPool commandPool;
-
-    struct FrameBufferAttachment {
-        VkImage image;
-        VkDeviceMemory mem;
-        VkImageView view;
-    };
+    VkCommandPool command_pool_;
 
     struct FrameBuffer {
         VkFramebuffer frameBuffer;
-        FrameBufferAttachment position, normal, albedo;
-        FrameBufferAttachment depth;
+        AppFramebufferAttachment position, normal, albedo;
+        AppFramebufferAttachment depth;
         VkRenderPass renderPass;
     } offScreenFrameBuf;
 
@@ -189,7 +180,7 @@ private:
     } vertices_new;
 
 
-    FrameBufferAttachment depthAttachment;
+    AppFramebufferAttachment depthAttachment;
 
     const std::vector<uint32_t> indices = {
         0, 1, 2, 2, 3, 0,

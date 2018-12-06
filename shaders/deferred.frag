@@ -7,8 +7,10 @@ layout (binding = 1) uniform sampler2D samplerposition;
 layout (binding = 2) uniform sampler2D samplerNormal;
 layout (binding = 3) uniform sampler2D samplerAlbedo;
 
+// in
 layout (location = 0) in vec2 inUV;
 
+// out
 layout (location = 0) out vec4 outFragcolor;
 
 struct Light {
@@ -79,8 +81,4 @@ void main()
 	outFragcolor = vec4(normalize(vec3(texture(samplerNormal, inUV))), 1.f);
 	outFragcolor = vec4((normal + vec3(1.f)) / 2.f, 1.f);
 	outFragcolor = vec4(fragcolor * 2.5, 1.0);
-	outFragcolor = vec4(normal, 1.f);
-	outFragcolor = texture(samplerAlbedo, inUV);
-	outFragcolor = texture(samplerposition, inUV);
-
 }

@@ -3,6 +3,13 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
+layout (binding = 0) uniform UBO 
+{
+	mat4 model;
+	mat4 view;
+	mat4 proj;
+	mat4 deferredProj;
+} ubo;
 layout (binding = 1) uniform sampler2D samplerColor;
 layout (binding = 2) uniform sampler2D samplerNormalMap;
 
@@ -11,6 +18,7 @@ layout (location = 1) in vec2 inUV;
 layout (location = 2) in vec3 inColor;
 layout (location = 3) in vec3 inWorldPos;
 layout (location = 4) in vec3 inTangent;
+
 
 layout (location = 0) out vec4 outPosition;
 layout (location = 1) out vec4 outNormal;
@@ -30,4 +38,5 @@ void main()
 	outNormal = vec4(normalize(tnorm), 1.0);
 
 	outAlbedo = texture(samplerColor, inUV);
+	// outAlbedo = vec4(ubo.deferredProj[0][0], ubo.deferredProj[0][1], ubo.deferredProj[0][2], 1.f);
 }

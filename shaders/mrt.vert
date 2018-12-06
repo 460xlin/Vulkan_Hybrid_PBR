@@ -8,6 +8,8 @@ layout (location = 1) in vec2 inUV;
 layout (location = 2) in vec3 inColor;
 layout (location = 3) in vec3 inNormal;
 layout (location = 4) in vec3 inTangent;
+layout (location = 5) in vec3 inEx;
+
 
 // layout (binding = 0) uniform UBO 
 // {
@@ -42,7 +44,6 @@ void main()
 	vec4 deltaPos = vec4(ubo.deferredProj[gl_InstanceIndex][0],
 	ubo.deferredProj[gl_InstanceIndex][1],
 	ubo.deferredProj[gl_InstanceIndex][2], 0.f);
-
 	// instancing
 	vec4 tmpPos = inPos + deltaPos;
 
