@@ -4,12 +4,24 @@
 
 #include <stb_image.h>
 
-// cam & mouse
-bool leftMouseDown = false;
-bool rightMouseDown = false;
-double previousX = 0.0;
-double previousY = 0.0;
-Camera* orbitCam;
+// Timers =================================================
+std::chrono::time_point<std::chrono::steady_clock> START_TIME;
+std::chrono::time_point<std::chrono::steady_clock> LAST_RECORD_TIME;
+
+void INIT_GLOBAL_TIME() {
+    START_TIME = std::chrono::high_resolution_clock::now();
+    LAST_RECORD_TIME = std::chrono::high_resolution_clock::now();
+}
+
+void SET_GLOBAL_RECORD_TIME() {
+    LAST_RECORD_TIME = std::chrono::high_resolution_clock::now();
+}
+
+float GET_CLOBAL_TIME_GAP_SINCE_LAST_RECORD() {
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - LAST_RECORD_TIME).count();
+    return time;
+}
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pCallback) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -28,18 +40,87 @@ void DestroyDebugUtilsMessengerEXT(VkInstance instance, VkDebugUtilsMessengerEXT
     }
 }
 
+// cam & mouse & input =================================================
+bool leftMouseDown = false;
+bool rightMouseDown = false;
+double previousX = 0.0;
+double previousY = 0.0;
+Camera* orbitCam;
 
-VulkanApp::VulkanApp() {}
-
-void VulkanApp::run() {
-    initWindow();
-    initCam();
-    createScene();
-    initVulkan();
-    mainLoop();
-    cleanup();
+void VulkanApp::initCam() {
+    orbitCam = new Camera((float)HEIGHT / WIDTH);
 }
 
+void VulkanApp::mouseDownCallback(GLFWwindow* window, int button, int action, int mods) {
+    if (button == GLFW_MOUSE_BUTTON_LEFT) {
+        if (action == GLFW_PRESS) {
+            leftMouseDown = true;
+            glfwGetCursorPos(window, &previousX, &previousY);
+        }
+        else if (action == GLFW_RELEASE) {
+            leftMouseDown = false;
+        }
+    }
+    else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+        if (action == GLFW_PRESS) {
+            rightMouseDown = true;
+            glfwGetCursorPos(window, &previousX, &previousY);
+        }
+        else if (action == GLFW_RELEASE) {
+            rightMouseDown = false;
+        }
+    }
+}
+
+void VulkanApp::mouseMoveCallback(GLFWwindow* window, double xPosition, double yPosition) {
+    if (leftMouseDown) {
+        double sensitivity = 0.5;
+        float deltaX = static_cast<float>((previousX - xPosition) * sensitivity);
+        float deltaY = static_cast<float>((previousY - yPosition) * sensitivity);
+
+        orbitCam->UpdateOrbit(deltaX, deltaY, 0.0f);
+
+        previousX = xPosition;
+        previousY = yPosition;
+    }
+    else if (rightMouseDown) {
+        double deltaZ = static_cast<float>((previousY - yPosition) * 0.05);
+
+        orbitCam->UpdateOrbit(0.0f, 0.0f, deltaZ);
+
+        previousY = yPosition;
+    }
+}
+
+void VulkanApp::keyDownCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    float timeGap = GET_CLOBAL_TIME_GAP_SINCE_LAST_RECORD();
+    if (key == GLFW_KEY_W && action == GLFW_PRESS) {
+        // go forward
+
+    }
+    else if (key == GLFW_KEY_S && action == GLFW_PRESS) {
+        // go back
+
+    }
+    else if (key == GLFW_KEY_A && action == GLFW_PRESS) {
+        // go left
+
+    }
+    else if (key == GLFW_KEY_D && action == GLFW_PRESS) {
+        // go right
+
+    }
+    else if (key == GLFW_KEY_Q && action == GLFW_PRESS) {
+        // go up
+    }
+    else if (key == GLFW_KEY_E && action == GLFW_PRESS) {
+        // go down
+    }
+}
+
+
+
+// Init non-vulkan stuff =================================================
 void VulkanApp::initWindow() {
     glfwInit();
 
@@ -50,7 +131,28 @@ void VulkanApp::initWindow() {
     glfwSetFramebufferSizeCallback(window, framebufferResizeCallback);
     glfwSetMouseButtonCallback(window, mouseDownCallback);
     glfwSetCursorPosCallback(window, mouseMoveCallback);
+    glfwSetKeyCallback(window, keyDownCallback);
 }
+
+
+
+
+
+
+
+VulkanApp::VulkanApp() {}
+
+void VulkanApp::run() {
+    initWindow();
+    initCam();
+    INIT_GLOBAL_TIME();
+    createScene();
+    initVulkan();
+    mainLoop();
+    cleanup();
+}
+
+
 
 void VulkanApp::framebufferResizeCallback(GLFWwindow* window, int width, int height) {
     auto app = reinterpret_cast<VulkanApp*>(glfwGetWindowUserPointer(window));
@@ -1904,7 +2006,6 @@ void VulkanApp::createSyncObjects()
 
 }
 
-// HERE
 void VulkanApp::rt_updateUniformBuffer() {
     static auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -2413,50 +2514,11 @@ void VulkanApp::createOffscreenFramebuffers() {
 }
 
 
-void VulkanApp::mouseDownCallback(GLFWwindow* window, int button, int action, int mods) {
-    if (button == GLFW_MOUSE_BUTTON_LEFT) {
-        if (action == GLFW_PRESS) {
-            leftMouseDown = true;
-            glfwGetCursorPos(window, &previousX, &previousY);
-        }
-        else if (action == GLFW_RELEASE) {
-            leftMouseDown = false;
-        }
-    }
-    else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
-        if (action == GLFW_PRESS) {
-            rightMouseDown = true;
-            glfwGetCursorPos(window, &previousX, &previousY);
-        }
-        else if (action == GLFW_RELEASE) {
-            rightMouseDown = false;
-        }
-    }
-}
 
-void VulkanApp::mouseMoveCallback(GLFWwindow* window, double xPosition, double yPosition) {
-    if (leftMouseDown) {
-        double sensitivity = 0.5;
-        float deltaX = static_cast<float>((previousX - xPosition) * sensitivity);
-        float deltaY = static_cast<float>((previousY - yPosition) * sensitivity);
 
-        orbitCam->UpdateOrbit(deltaX, deltaY, 0.0f);
 
-        previousX = xPosition;
-        previousY = yPosition;
-    }
-    else if (rightMouseDown) {
-        double deltaZ = static_cast<float>((previousY - yPosition) * 0.05);
 
-        orbitCam->UpdateOrbit(0.0f, 0.0f, deltaZ);
 
-        previousY = yPosition;
-    }
-}
-
-void VulkanApp::initCam() {
-    orbitCam = new Camera((float)HEIGHT / WIDTH);
-}
 
 
 void VulkanApp::createQuadVertexBuffer()
@@ -2785,7 +2847,6 @@ void VulkanApp::rt_prepareTextureTarget(MyTexture& tex, VkFormat format, uint32_
         tex.textureImage, //image
         tex.textureImageMemory); //imagemem
 
-    // HERE
     transitionImageLayout(tex.textureImage, format,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_GENERAL);
@@ -2872,7 +2933,6 @@ void VulkanApp::rt_graphics_setupDescriptorSet()
     // todo: to set descriptor set info for create descriptor set
 
     VkDescriptorImageInfo rt_imageInfo{};
-    // HERE
     rt_imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
     rt_imageInfo.imageView = rt_result.textureImageView;
     rt_imageInfo.sampler = rt_result.textureSampler;

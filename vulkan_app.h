@@ -29,10 +29,6 @@
 const int WIDTH = 800;
 const int HEIGHT = 600;
 
-//const std::string MODEL_PATH = "models/chalet.obj";
-//const std::string ALBEDO_TEXTURE_PATH = "textures/chalet_old.jpg";
-//const std::string NORMALMAP_TEXTURE_PATH = "textures/chalet_old.jpg";
-
 const int MAX_FRAMES_IN_FLIGHT = 2;
 
 const std::vector<const char*> validationLayers = {
@@ -208,6 +204,12 @@ private:
 
     // MEMBER VAR
 
+    // mouse & cam & input =================================================
+    void initCam();
+    static void mouseDownCallback(GLFWwindow* window, int button, int action, int mods);
+    static void mouseMoveCallback(GLFWwindow* window, double xPosition, double yPosition);
+    static void keyDownCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+
     void initWindow();
 
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
@@ -330,10 +332,7 @@ private:
 
     VkSampler colorSampler;
 
-    // mouse & cam
-    void initCam();
-    static void mouseDownCallback(GLFWwindow* window, int button, int action, int mods);
-    static void mouseMoveCallback(GLFWwindow* window, double xPosition, double yPosition);
+    
 
     // debug view
     bool debugCam = false;
@@ -465,4 +464,5 @@ private:
     void rt_updateUniformBuffer();
 
     RTUniformBufferObject rt_ubo;
+
 };

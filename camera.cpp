@@ -41,5 +41,29 @@ glm::vec3 Camera::GetPos() {
     return pos;
 }
 
+glm::vec3 Camera::GetForward() {
+    return forward;
+}
+
+void Camera::MoveForward(float deltaTime) {
+    pos += forward * deltaTime * tanslationSpeed;
+    UpdateViewMatrix();
+}
+
+void Camera::MoveRight(float deltaTime) {
+    pos += glm::cross(forward, up) * deltaTime * tanslationSpeed;
+    UpdateViewMatrix();
+}
+
+void Camera::MoveUp(float deltaTime) {
+    pos += up * deltaTime * tanslationSpeed;
+    UpdateViewMatrix();
+}
+
+void Camera::UpdateViewMatrix() {
+
+}
+
+
 Camera::~Camera() {
 }
