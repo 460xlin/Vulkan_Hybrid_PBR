@@ -3,15 +3,8 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
-layout (binding = 0) uniform UBO 
-{
-	mat4 model;
-	mat4 view;
-	mat4 proj;
-	mat4 deferredProj;
-} ubo;
-layout (binding = 1) uniform sampler2D samplerColor;
-layout (binding = 2) uniform sampler2D samplerNormalMap;
+layout (binding = 2) uniform sampler2D samplerColor;
+layout (binding = 3) uniform sampler2D samplerNormalMap;
 
 layout (location = 0) in vec3 inNormal;
 layout (location = 1) in vec2 inUV;

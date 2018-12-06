@@ -164,12 +164,12 @@ private:
 
     VkCommandPool command_pool_;
 
-    struct FrameBuffer {
+   /* struct FrameBuffer {
         VkFramebuffer frameBuffer;
         AppFramebufferAttachment position, normal, albedo;
         AppFramebufferAttachment depth;
         VkRenderPass renderPass;
-    } offScreenFrameBuf;
+    } offScreenFrameBuf;*/
 
    //buffer: vkBuffer vkdevicememory vkdescriptorbufferInfo vkbufferusageFlags vkmemPropertyFlags;
 
@@ -227,7 +227,7 @@ private:
 
     void createSwapChain();
 
-    void createImageViews();
+    void createSwapChainImageViews();
 
     void createRenderPass();
 
@@ -332,23 +332,23 @@ private:
     // union buffer
     struct {
         MyUniformBuffer vsFullScreen;
-        MyUniformBuffer vsOffScreen;
+        // MyUniformBuffer vsOffScreen;
         MyUniformBuffer rt_compute;
     } uniformBuffers;
 
     VkPipelineLayout deferredPipelineLayout;
-    VkPipelineLayout offscreenPipelineLayout;
+    //VkPipelineLayout offscreenPipelineLayout;
     VkPipeline deferredPipeline;
-    VkPipeline offscreenPipeline;
+    //VkPipeline offscreenPipeline;
 
     VkPipelineShaderStageCreateInfo loadShader(std::string fileName, VkShaderStageFlagBits stage);
 
     std::vector<VkShaderModule> shaderModules;
 
     VkDescriptorSet quadDescriptorSet;
-    VkCommandBuffer offscreenCommandBuffer = VK_NULL_HANDLE;
+    //VkCommandBuffer offscreenCommandBuffer = VK_NULL_HANDLE;
 
-    void createOffscreenCommandBuffer();
+    //void createOffscreenCommandBuffer();
 
 
     void draw();
@@ -456,4 +456,23 @@ private:
 
     RTUniformBufferObject rt_ubo;
 
+
+    // offscreen =================================================
+    AppOffscreenPipelineAssets offscreen_;
+    void prepareOffscreen();
+    void createOffscreenDescriptorSetLayout();
+    void createOffscreenPipelineLayout();
+    void createOffscreenRenderPass();
+    void createOffscreenFrameBuffer();
+    void createOffscreenPipeline();
+    void createOffscreenCommandBuffer();
+
+    // scene loading and prepare assets =================================================
+    std::vector<AppSceneObject> scene_objects_;
+    void prepareSceneObjects();
+    void loadSceneObjectMesh(AppSceneObject& scene_object);
+    void loadSceneObjectTexture(AppSceneObject& scene_object);
+    void loadSingleSceneObjectTexture(AppTextureInfo& texture);
 };
+
+
