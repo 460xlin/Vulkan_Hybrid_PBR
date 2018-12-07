@@ -177,17 +177,20 @@ void VulkanApp::initVulkan() {
     setupVertexDescriptions();
     // begin offscreen
     // scene objects need offscreen's ubo, so has to be before object
+    
     prepareSceneObjectsData();
     prepareOffscreen();
     prepareSceneObjectsDescriptor();
+    prepareOffscreenCommandBuffer();
     prepareDeferred();
+    
 
     // not related started -------------------------------------------------
     // createRenderPass();
-    //createFramebuffers();
+    //
     //createDescriptorSetLayout();
     //createDescriptorSets_quad_old();
-
+    // createSwapChainFramebuffers_old();
     //for (int i = 0; i < models.size(); ++i) {
     //    createTextureImage(models[i]);
     //    createTextureImageView(models[i]);
@@ -228,6 +231,7 @@ void VulkanApp::mainLoop() {
         // rt_draw();
         // draw();
         draw_new();
+        updateUniformBuffers();
     }
 
     vkDeviceWaitIdle(device_);
@@ -338,7 +342,7 @@ void VulkanApp::recreateSwapChain() {
     createRenderPass();
     createGraphicsPipeline();
     createDepthResources();
-    createFramebuffers();
+    createSwapChainFramebuffers_old();
     createDeferredCommandBuffers_old();
 }
 
@@ -857,8 +861,6 @@ void VulkanApp::createGraphicsPipeline_old() {
 
     //create pipeline, prepare pipeline create info
 
-
-
     std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages;
 
     VkGraphicsPipelineCreateInfo pipelineCreateInfo{};
@@ -980,8 +982,34 @@ VkPipelineShaderStageCreateInfo VulkanApp::loadShader(std::string fileName, VkSh
 
 }
 
+// after deferred render pass
+void VulkanApp::createSwapChainFramebuffers() {
+    swapchain_framebuffers_.resize(swapchain_imageviews_.size());
 
-void VulkanApp::createFramebuffers() {
+    for (size_t i = 0; i < swapchain_imageviews_.size(); i++) {
+
+        std::vector<VkImageView> attachments = {
+            swapchain_imageviews_[i],
+            depth_attachment_.imageView
+        };
+
+        VkFramebufferCreateInfo framebufferInfo = {};
+        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        // IMPT
+        framebufferInfo.renderPass = deferred_.renderPass;
+        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
+        framebufferInfo.pAttachments = attachments.data();
+        framebufferInfo.width = swapchain_extent_.width;
+        framebufferInfo.height = swapchain_extent_.height;
+        framebufferInfo.layers = 1;
+
+        if (vkCreateFramebuffer(device_, &framebufferInfo, nullptr, &swapchain_framebuffers_[i]) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create framebuffer!");
+        }
+    }
+}
+
+void VulkanApp::createSwapChainFramebuffers_old() {
     swapchain_framebuffers_.resize(swapchain_imageviews_.size());
 
     for (size_t i = 0; i < swapchain_imageviews_.size(); i++) {
@@ -1149,19 +1177,32 @@ void VulkanApp::createTextureImage(ModelVertexIndexTextureBuffer& model) {
         VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        model.normalMapTexture.textureImage, model.normalMapTexture.textureImageMemory);
+        model.normalMapTexture.textureImage,
+        model.normalMapTexture.textureImageMemory);
 
-    transitionImageLayout(model.normalMapTexture.textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyBufferToImage(nor_stagingBuffer, model.normalMapTexture.textureImage, static_cast<uint32_t>(nor_texWidth), static_cast<uint32_t>(nor_texHeight));
-    transitionImageLayout(model.normalMapTexture.textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    transitionImageLayout(model.normalMapTexture.textureImage,
+        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copyBufferToImage(nor_stagingBuffer, model.normalMapTexture.textureImage,
+        static_cast<uint32_t>(nor_texWidth),
+        static_cast<uint32_t>(nor_texHeight));
+    transitionImageLayout(model.normalMapTexture.textureImage,
+        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     vkDestroyBuffer(device_, nor_stagingBuffer, nullptr);
     vkFreeMemory(device_, nor_stagingBufferMemory, nullptr);
 }
 
 void VulkanApp::createTextureImageView(ModelVertexIndexTextureBuffer& model) {
-    model.albedoTexture.textureImageView = createImageView(model.albedoTexture.textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
-    model.normalMapTexture.textureImageView = createImageView(model.normalMapTexture.textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
+    model.albedoTexture.textureImageView = createImageView(
+        model.albedoTexture.textureImage,
+        VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
+    model.normalMapTexture.textureImageView = createImageView(
+        model.normalMapTexture.textureImage,
+        VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT);
 }
 
 void VulkanApp::createTextureSampler(ModelVertexIndexTextureBuffer& model) {
@@ -1762,6 +1803,7 @@ void VulkanApp::createDescriptorPool() {
 }
 
 void VulkanApp::createDescriptorSets_quad_old() {
+    // HERE 0
     std::vector<VkWriteDescriptorSet> writeDescriptorSets;
     VkDescriptorSetAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -2027,7 +2069,7 @@ uint32_t VulkanApp::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags pr
 
 // todo check whether the buffer of model is passed into the command buffer
 void VulkanApp::createDeferredCommandBuffers_old() {
-    command_buffers_.resize(swapchain_framebuffers_.size());
+    command_buffers_.resize(swapchain_images_.size());
 
     VkCommandBufferAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -2800,7 +2842,6 @@ void VulkanApp::prepareQuadVertexAndIndexBuffer()
     createQuadIndexBuffer();
 }
 
-
 void VulkanApp::setupVertexDescriptions() {
 
 
@@ -3310,7 +3351,7 @@ void VulkanApp::rt_prepareCompute() {
 
 
 void VulkanApp::rt_createRaytraceDisplayCommandBuffer() {
-    rt_drawCommandBuffer.resize(swapchain_framebuffers_.size());
+    rt_drawCommandBuffer.resize(swapchain_images_.size());
 
     VkCommandBufferAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -3490,6 +3531,10 @@ void VulkanApp::prepareOffscreen() {
     createOffscreenRenderPass();
     createOffscreenFrameBuffer();
     createOffscreenPipeline();
+    // createOffscreenCommandBuffer();
+}
+
+void VulkanApp::prepareOffscreenCommandBuffer() {
     createOffscreenCommandBuffer();
 }
 
@@ -3687,7 +3732,7 @@ void VulkanApp::createOffscreenFrameBuffer() {
     attachments[2] = offscreen_.frameBufferAssets.color.imageView;
     attachments[3] = offscreen_.frameBufferAssets.mrao.imageView;
     attachments[4] = offscreen_.frameBufferAssets.depth.imageView;
-    // HERE 0
+    
     VkFramebufferCreateInfo fbufCreateInfo = {};
     fbufCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     fbufCreateInfo.pNext = NULL;
@@ -3766,6 +3811,16 @@ void VulkanApp::createOffscreenPipeline() {
         "C:/Users/Zichuan/Documents/Vulkan_Hybrid_PBR/shaders/mrt.frag.spv",
         VK_SHADER_STAGE_FRAGMENT_BIT);
 
+    std::array<VkPipelineColorBlendAttachmentState, 4> blendAttachmentStates = {
+            blendAttachmentState,
+            blendAttachmentState,
+            blendAttachmentState,
+            blendAttachmentState
+    };
+
+    colorBlendState.attachmentCount = static_cast<uint32_t>(blendAttachmentStates.size());
+    colorBlendState.pAttachments = blendAttachmentStates.data();
+
     VkGraphicsPipelineCreateInfo pipelineCreateInfo{};
     pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipelineCreateInfo.layout = offscreen_.pipelineLayout;
@@ -3784,15 +3839,6 @@ void VulkanApp::createOffscreenPipeline() {
     pipelineCreateInfo.pStages = shaderStages.data();
     pipelineCreateInfo.pVertexInputState = &vertices_new.inputState;
 
-    std::array<VkPipelineColorBlendAttachmentState, 4> blendAttachmentStates = {
-            blendAttachmentState,
-            blendAttachmentState,
-            blendAttachmentState,
-            blendAttachmentState
-    };
-
-    colorBlendState.attachmentCount = static_cast<uint32_t>(blendAttachmentStates.size());
-    colorBlendState.pAttachments = blendAttachmentStates.data();
     if (vkCreateGraphicsPipelines(device_, pipelineCache, 1,
         &pipelineCreateInfo, nullptr, &offscreen_.pipeline)
         != VK_SUCCESS) {
@@ -3989,7 +4035,7 @@ void VulkanApp::prepareSceneObjectsData() {
     // createOffscreenDescriptorSetLayout()
     // createOffscreenUniformBuffer()
 
-    for (auto scene_object : scene_objects_) {
+    for (auto& scene_object : scene_objects_) {
         loadSceneObjectMesh(scene_object);
         // texture
         // loadSceneObjectTexture(scene_object);
@@ -4002,159 +4048,10 @@ void VulkanApp::prepareSceneObjectsData() {
 }
 
 void VulkanApp::prepareSceneObjectsDescriptor() {
-    for (auto scene_object : scene_objects_) {
+    for (auto& scene_object : scene_objects_) {
         // allocate descriptor
         createSceneObjectDescriptorSet(scene_object);
     }
-}
-
-void VulkanApp::loadAllSceneObjectTexture(AppSceneObject& scene_object) {
-
-    // albedo texture 
-    int albedo_texWidth, albedo_texHeight, albedo_texChannels;
-    stbi_uc* albedo_pixels = stbi_load(scene_object.albedo.path.c_str(),
-        &albedo_texWidth, &albedo_texHeight,
-        &albedo_texChannels, STBI_rgb_alpha);
-    VkDeviceSize albedo_imageSize = albedo_texWidth * albedo_texHeight * 4;
-
-    if (!albedo_pixels) {
-        throw std::runtime_error("failed to load abledo texture image!");
-    }
-
-    // -------------- albedo --------------
-    VkBuffer albedo_stagingBuffer;
-    VkDeviceMemory albedo_stagingBufferMemory;
-
-    createBuffer(albedo_imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        albedo_stagingBuffer, albedo_stagingBufferMemory);
-
-    void* data;
-    vkMapMemory(device_, albedo_stagingBufferMemory, 0, albedo_imageSize, 0, &data);
-    memcpy(data, albedo_pixels, static_cast<size_t>(albedo_imageSize));
-    vkUnmapMemory(device_, albedo_stagingBufferMemory);
-
-    stbi_image_free(albedo_pixels);
-
-    createImage(albedo_texWidth, albedo_texHeight,
-        VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        scene_object.albedo.texture.image,
-        scene_object.albedo.texture.deviceMemory);
-
-    // transition layout
-    transitionImageLayout(scene_object.albedo.texture.image,
-        VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyBufferToImage(albedo_stagingBuffer, scene_object.albedo.texture.image,
-        static_cast<uint32_t>(albedo_texWidth),
-        static_cast<uint32_t>(albedo_texHeight));
-    transitionImageLayout(scene_object.albedo.texture.image,
-        VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-    vkDestroyBuffer(device_, albedo_stagingBuffer, nullptr);
-    vkFreeMemory(device_, albedo_stagingBufferMemory, nullptr);
-
-    // -------------- normal --------------
-    int normal_texWidth, normal_texHeight, normal_texChannels;
-    stbi_uc* normal_pixels = stbi_load(scene_object.normal.path.c_str(),
-        &normal_texWidth, &normal_texHeight, &normal_texChannels,
-        STBI_rgb_alpha);
-    VkDeviceSize normal_imageSize = normal_texWidth * normal_texHeight * 4;
-
-    if (!normal_pixels) {
-        throw std::runtime_error("failed to load abledo texture image!");
-    }
-
-    VkBuffer normal_stagingBuffer;
-    VkDeviceMemory normal_stagingBufferMemory;
-
-    createBuffer(normal_imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        normal_stagingBuffer, normal_stagingBufferMemory);
-
-    void* normalData;
-
-    vkMapMemory(device_, normal_stagingBufferMemory, 0, normal_imageSize, 0, &normalData);
-    memcpy(normalData, normal_pixels, static_cast<size_t>(normal_imageSize));
-    vkUnmapMemory(device_, normal_stagingBufferMemory);
-
-    stbi_image_free(normal_pixels);
-
-    createImage(normal_texWidth, normal_texHeight,
-        VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        scene_object.normal.texture.image,
-        scene_object.normal.texture.deviceMemory);
-
-    transitionImageLayout(scene_object.normal.texture.image,
-        VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyBufferToImage(normal_stagingBuffer, scene_object.normal.texture.image,
-        static_cast<uint32_t>(normal_texWidth),
-        static_cast<uint32_t>(normal_texHeight));
-    transitionImageLayout(scene_object.normal.texture.image,
-        VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    vkDestroyBuffer(device_, normal_stagingBuffer, nullptr);
-    vkFreeMemory(device_, normal_stagingBufferMemory, nullptr);
-
-    // -------------- mrao --------------
-    int mrao_texWidth, mrao_texHeight, mrao_texChannels;
-    stbi_uc* mrao_pixels = stbi_load(scene_object.mrao.path.c_str(),
-        &mrao_texWidth, &mrao_texHeight, &mrao_texChannels,
-        STBI_rgb_alpha);
-    VkDeviceSize mrao_imageSize = mrao_texWidth * mrao_texHeight * 4;
-
-    if (!mrao_pixels) {
-        throw std::runtime_error("failed to load abledo texture image!");
-    }
-
-    VkBuffer mrao_stagingBuffer;
-    VkDeviceMemory mrao_stagingBufferMemory;
-
-    createBuffer(mrao_imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        mrao_stagingBuffer, mrao_stagingBufferMemory);
-
-    void* mraoData;
-
-    vkMapMemory(device_, mrao_stagingBufferMemory, 0, mrao_imageSize, 0, &mraoData);
-    memcpy(mraoData, mrao_pixels, static_cast<size_t>(mrao_imageSize));
-    vkUnmapMemory(device_, mrao_stagingBufferMemory);
-
-    stbi_image_free(mrao_pixels);
-
-    createImage(mrao_texWidth, mrao_texHeight,
-        VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        scene_object.mrao.texture.image,
-        scene_object.mrao.texture.deviceMemory);
-
-    transitionImageLayout(scene_object.mrao.texture.image,
-        VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-    copyBufferToImage(mrao_stagingBuffer, scene_object.mrao.texture.image,
-        static_cast<uint32_t>(mrao_texWidth),
-        static_cast<uint32_t>(mrao_texHeight));
-    transitionImageLayout(scene_object.mrao.texture.image,
-        VK_FORMAT_R8G8B8A8_UNORM,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    vkDestroyBuffer(device_, mrao_stagingBuffer, nullptr);
-    vkFreeMemory(device_, mrao_stagingBufferMemory, nullptr);
 }
 
 void VulkanApp::loadSingleSceneObjectTexture(AppTextureInfo& texture_info) {
@@ -4191,6 +4088,11 @@ void VulkanApp::loadSingleSceneObjectTexture(AppTextureInfo& texture_info) {
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         texture_info.texture.image,
         texture_info.texture.deviceMemory);
+
+    texture_info.texture.imageView = createImageView(
+        texture_info.texture.image,
+        VK_FORMAT_R8G8B8A8_UNORM,
+        VK_IMAGE_ASPECT_COLOR_BIT);
 
     transitionImageLayout(texture_info.texture.image,
         VK_FORMAT_R8G8B8A8_UNORM,
@@ -4322,6 +4224,7 @@ void VulkanApp::prepareDeferred() {
     createDeferredDescriptorSet();
     createDeferredPipelineLayout();
     createDeferredRenderPass();
+    createSwapChainFramebuffers();
     createDeferredPipeline();
     createDeferredCommandBuffer();
 }
@@ -4401,6 +4304,49 @@ void VulkanApp::createDeferredDescriptorSet() {
         != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate deferred_.descriptorSet!");
     }
+
+    // update this descriptorSet
+    std::vector<VkWriteDescriptorSet> write_sets = {
+        // binding 0: deferred uniform buffer
+        apputil::createBufferWriteDescriptorSet(
+            deferred_.descriptorSet,
+            VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            0,
+            &deferred_.uniformBufferAndContent.uniformBuffer
+            .descriptorBufferInfo,
+            1),
+        // binding 1: world position
+        apputil::createImageWriteDescriptorSet(
+            deferred_.descriptorSet,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            1,
+            &offscreen_.frameBufferAssets.position.descriptorImageInfo,
+            1),
+        // binding 2: world normal
+        apputil::createImageWriteDescriptorSet(
+            deferred_.descriptorSet,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            2,
+            &offscreen_.frameBufferAssets.normal.descriptorImageInfo,
+            1),
+        // binding 3: color
+        apputil::createImageWriteDescriptorSet(
+            deferred_.descriptorSet,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            3,
+            &offscreen_.frameBufferAssets.color.descriptorImageInfo,
+            1),
+        // binding 4: mrao
+        apputil::createImageWriteDescriptorSet(
+            deferred_.descriptorSet,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            4,
+            &offscreen_.frameBufferAssets.mrao.descriptorImageInfo,
+            1)
+    };
+
+    vkUpdateDescriptorSets(device_, static_cast<uint32_t>(write_sets.size()),
+        write_sets.data(), 0, NULL);
 }
 
 void VulkanApp::createDeferredPipelineLayout() {
@@ -4506,28 +4452,104 @@ void VulkanApp::createDeferredRenderPass() {
 }
 
 void VulkanApp::createDeferredPipeline() {
-    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
-    pipelineLayoutCreateInfo.sType =
-        VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutCreateInfo.setLayoutCount = 1;
-    pipelineLayoutCreateInfo.pSetLayouts = &deferred_.descriptorSetLayout;
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyState{};
+    inputAssemblyState.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssemblyState.flags = 0;
+    inputAssemblyState.primitiveRestartEnable = VK_FALSE;
 
-    if (vkCreatePipelineLayout(device_, &pipelineLayoutCreateInfo, nullptr,
-        &deferred_.pipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error(
-            "failed at deferred_.pipelineLayout creation");
+    VkPipelineRasterizationStateCreateInfo rasterizationState{};
+    rasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizationState.cullMode = VK_CULL_MODE_NONE;
+    rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizationState.flags = 0;
+    rasterizationState.depthClampEnable = VK_FALSE;
+    rasterizationState.lineWidth = 1.0f;
+
+    VkPipelineColorBlendAttachmentState blendAttachmentState{};
+    blendAttachmentState.colorWriteMask = 0xf;
+    blendAttachmentState.blendEnable = VK_FALSE;
+
+    VkPipelineColorBlendStateCreateInfo colorBlendState{};
+    colorBlendState.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlendState.attachmentCount = 1;
+    colorBlendState.pAttachments = &blendAttachmentState;
+
+    VkPipelineDepthStencilStateCreateInfo depthStencilState{};
+    depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencilState.depthTestEnable = VK_TRUE;
+    depthStencilState.depthWriteEnable = VK_TRUE;
+    depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    depthStencilState.front = depthStencilState.back;
+    depthStencilState.back.compareOp = VK_COMPARE_OP_ALWAYS;
+
+    VkPipelineViewportStateCreateInfo viewportState{};
+    viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount = 1;
+    viewportState.flags = 0;
+
+    VkPipelineMultisampleStateCreateInfo multisampleState{};
+    multisampleState.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisampleState.flags = 0;
+
+    std::vector<VkDynamicState> dynamicStateEnables = {
+             VK_DYNAMIC_STATE_VIEWPORT,
+             VK_DYNAMIC_STATE_SCISSOR
+    };
+
+    VkPipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    dynamicState.pDynamicStates = dynamicStateEnables.data();
+    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStateEnables.size());
+    dynamicState.flags = 0;
+
+    VkPipelineVertexInputStateCreateInfo emptyInputState{};
+    emptyInputState.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+    std::array<VkPipelineShaderStageCreateInfo, 2> shaderStages;
+    shaderStages[0] = loadShader(
+        "../../shaders/deferred.vert.spv",
+        VK_SHADER_STAGE_VERTEX_BIT);
+    shaderStages[1] = loadShader(
+        "../../shaders/deferred.frag.spv",
+        VK_SHADER_STAGE_FRAGMENT_BIT);
+
+    VkGraphicsPipelineCreateInfo pipelineCreateInfo{};
+    pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineCreateInfo.layout = deferred_.pipelineLayout;
+    pipelineCreateInfo.renderPass = deferred_.renderPass;
+    pipelineCreateInfo.flags = 0;
+    pipelineCreateInfo.basePipelineIndex = -1;
+    pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
+    pipelineCreateInfo.pInputAssemblyState = &inputAssemblyState;
+    pipelineCreateInfo.pRasterizationState = &rasterizationState;
+    pipelineCreateInfo.pColorBlendState = &colorBlendState;
+    pipelineCreateInfo.pMultisampleState = &multisampleState;
+    pipelineCreateInfo.pViewportState = &viewportState;
+    pipelineCreateInfo.pDepthStencilState = &depthStencilState;
+    pipelineCreateInfo.pDynamicState = &dynamicState;
+    pipelineCreateInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
+    pipelineCreateInfo.pStages = shaderStages.data();
+    pipelineCreateInfo.pVertexInputState = &emptyInputState;
+
+    if (vkCreateGraphicsPipelines(device_, pipelineCache, 1,
+        &pipelineCreateInfo, nullptr, &deferred_.pipeline) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create deferred_.pipeline");
     }
 }
 
 void VulkanApp::createDeferredCommandBuffer() {
-    deferred_command_buffers_.resize(swapchain_framebuffers_.size());
+    deferred_command_buffers_.resize(swapchain_images_.size());
 
     VkCommandBufferAllocateInfo allocInfo = {};
     allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
     allocInfo.commandPool = command_pool_;
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
     allocInfo.commandBufferCount = (uint32_t)deferred_command_buffers_.size();
-
+    int a = 0;
     if (vkAllocateCommandBuffers(
         device_, &allocInfo, deferred_command_buffers_.data()) != VK_SUCCESS) {
         
@@ -4596,7 +4618,7 @@ void VulkanApp::createDeferredCommandBuffer() {
             1, 0, 0, 1);
         vkCmdEndRenderPass(deferred_command_buffers_[i]);
 
-        if (vkEndCommandBuffer(command_buffers_[i]) != VK_SUCCESS) {
+        if (vkEndCommandBuffer(deferred_command_buffers_[i]) != VK_SUCCESS) {
             throw std::runtime_error(
                 "failed to end deferred_command_buffer_s!");
         }
@@ -4646,6 +4668,35 @@ void VulkanApp::draw_new() {
     VkResult res = queuePresent(queue_, imageIndex, semaphores_.renderComplete);
     vkQueueWaitIdle(queue_);
 }
+
+// general =================================================
+void VulkanApp::updateUniformBuffers() {
+    // offscreen camera
+    auto& ocs_ubo = offscreen_.uniformBufferAndContent.content;
+
+    ocs_ubo.projMatrix = orbitCam->GetProjMat();
+    ocs_ubo.viewMatrix = orbitCam->GetViewMat();
+
+    uniformBufferCpy(
+        offscreen_.uniformBufferAndContent.uniformBuffer.deviceMemory, 
+        &ocs_ubo, sizeof(ocs_ubo));   
+
+    // scene object positions
+    auto& model_ubo = scene_objects_[0].uniformBufferAndContent.content;
+    model_ubo.modelMatrix = glm::mat4(1.f);
+    uniformBufferCpy(
+        scene_objects_[0].uniformBufferAndContent.uniformBuffer.deviceMemory,
+        &model_ubo, sizeof(model_ubo));
+}
+
+void VulkanApp::uniformBufferCpy(VkDeviceMemory& device_memory, void* ubo_ptr,
+    size_t size) {
+    void* data;
+    vkMapMemory(device_, device_memory, 0, size, 0, &data);
+    memcpy(data, ubo_ptr, size);
+    vkUnmapMemory(device_, device_memory);
+}
+
 
 
 

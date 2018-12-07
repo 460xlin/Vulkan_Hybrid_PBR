@@ -10,7 +10,6 @@ struct AppUniformBuffer {
     VkDescriptorBufferInfo descriptorBufferInfo;
 };
 
-
 struct AppTexture
 {
     VkImage image;
@@ -66,8 +65,6 @@ struct AppDeferredPipelineAssets {
     VkRenderPass renderPass;
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorSet descriptorSet;
-    VkCommandBuffer* commandBuffers;
-    int commandBufferCount;
     struct {
         AppUniformBuffer uniformBuffer;
         AppDeferredUniformBufferContent content;

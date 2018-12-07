@@ -235,7 +235,7 @@ private:
 
     void createGraphicsPipeline();
 
-    void createFramebuffers();
+    void createSwapChainFramebuffers_old();
 
     void createCommandPool();
 
@@ -458,6 +458,7 @@ private:
     // offscreen =================================================
     AppOffscreenPipelineAssets offscreen_;
     void prepareOffscreen();
+    void prepareOffscreenCommandBuffer();
     void createOffscreenUniformBuffer();
     // this one is called before loading model
     void createOffscreenDescriptorSetLayout();
@@ -472,10 +473,10 @@ private:
     void prepareSceneObjectsData();
     void prepareSceneObjectsDescriptor();
     void loadSceneObjectMesh(AppSceneObject& scene_object);
-    void loadAllSceneObjectTexture(AppSceneObject& scene_object);
     void loadSingleSceneObjectTexture(AppTextureInfo& texture);
     void createModelMatrixUniformBuffer(AppSceneObject& scene_object);
     void createSceneObjectDescriptorSet(AppSceneObject& scene_object);
+
 
     // deferred =================================================
     AppDeferredPipelineAssets deferred_;
@@ -489,7 +490,7 @@ private:
     void createDeferredDescriptorSet();
     void createDeferredPipelineLayout();
     void createDeferredRenderPass();
-    // no need for frame buffer, in swap chain
+    void createSwapChainFramebuffers();
     void createDeferredPipeline();
     void createDeferredCommandBuffer();
     // helper
@@ -498,6 +499,10 @@ private:
 
     // general =================================================
     void draw_new();
+    void updateUniformBuffers();
+    // helper
+    void uniformBufferCpy(VkDeviceMemory& device_memory, void* ubo_ptr,
+        size_t size);
 };
 
 

@@ -9,13 +9,16 @@ layout (location = 2) in vec3 inColor;
 layout (location = 3) in vec3 inNormal;
 layout (location = 4) in vec3 inTangent;
 
-layout (binding = 0) uniform UBO 
+layout (binding = 0) uniform CamInfo 
 {
-	mat4 model;
-	mat4 view;
-	mat4 proj;
-	mat4 deferredProj;
-} ubo;
+	mat4 projMatrix;
+	mat4 viewMatrix;
+} camera;
+
+layout (binding = 1) uniform SceneObject 
+{
+	mat4 modelMatrix;
+} model;
 
 layout (location = 0) out vec3 outNormal;
 layout (location = 1) out vec2 outUV;
@@ -30,22 +33,18 @@ out gl_PerVertex
 
 void main() 
 {
-
-	vec4 deltaPos = vec4(ubo.deferredProj[gl_InstanceIndex][0],
-	ubo.deferredProj[gl_InstanceIndex][1],
-	ubo.deferredProj[gl_InstanceIndex][2], 0.f);
 	// instancing
-	vec4 tmpPos = inPos + deltaPos;
+	vec4 tmpPos = inPos;
 
-	gl_Position = ubo.proj * ubo.view * ubo.model * tmpPos;
+	gl_Position = camera.projMatrix * camera.viewMatrix * model.modelMatrix * tmpPos;
 	
 	// Vertex position in world space
-	outWorldPos = vec3(ubo.model * tmpPos);
+	outWorldPos = vec3(model.modelMatrix * tmpPos);
 	// GL to Vulkan coord space
 	outWorldPos.y = -outWorldPos.y;
 	
 	// Normal in world space
-	mat3 mNormal = transpose(inverse(mat3(ubo.model)));
+	mat3 mNormal = transpose(inverse(mat3(model.modelMatrix)));
 	outNormal = mNormal * normalize(inNormal);	
 	outTangent = mNormal * normalize(inTangent);
 	
