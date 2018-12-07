@@ -180,16 +180,16 @@ private:
     } vertices_new;
 
 
-    AppFramebufferAttachment depthAttachment;
+    AppFramebufferAttachment depth_attachment_;
 
-    const std::vector<uint32_t> indices = {
+    const std::vector<uint32_t> indices_ = {
         0, 1, 2, 2, 3, 0,
         4, 5, 6, 6, 7, 4
     };
 
     VkDescriptorPool descriptor_pool_;
 
-    std::vector<VkCommandBuffer> commandBuffers;
+    std::vector<VkCommandBuffer> command_buffers_;
 
     bool framebufferResized = false;
 
@@ -271,7 +271,7 @@ private:
 
     void createDescriptorPool();
 
-    void createDescriptorSets();
+    void createDescriptorSets_quad_old();
 
     void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory);
 
@@ -283,7 +283,7 @@ private:
 
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
 
-    void createFinalRenderCommandBuffers();
+    void createDeferredCommandBuffers_old();
     void createSyncObjects();
     void updateUniformBuffer(uint32_t currentImage, glm::mat4 modelMatrix);
 
@@ -353,9 +353,7 @@ private:
 
     void draw();
 
-    void createQuadVertexBuffer();
-    void createQuadIndexBuffer();
-    void prepareQuad();
+    
 
     VkBuffer quadVertexBuffer;
     VkDeviceMemory quadVertexBufferMemory;
@@ -372,7 +370,7 @@ private:
         VkSemaphore presentComplete;
         // Command buffer submission and execution
         VkSemaphore renderComplete;
-    } semaphores;
+    } semaphores_;
 
 
     VkSemaphore offscreenSemaphore = VK_NULL_HANDLE;
@@ -461,6 +459,7 @@ private:
     AppOffscreenPipelineAssets offscreen_;
     void prepareOffscreen();
     void createOffscreenUniformBuffer();
+    // this one is called before loading model
     void createOffscreenDescriptorSetLayout();
     void createOffscreenPipelineLayout();
     void createOffscreenRenderPass();
@@ -470,12 +469,35 @@ private:
 
     // scene loading and prepare assets =================================================
     std::vector<AppSceneObject> scene_objects_;
-    void prepareSceneObjects();
+    void prepareSceneObjectsData();
+    void prepareSceneObjectsDescriptor();
     void loadSceneObjectMesh(AppSceneObject& scene_object);
     void loadAllSceneObjectTexture(AppSceneObject& scene_object);
     void loadSingleSceneObjectTexture(AppTextureInfo& texture);
     void createModelMatrixUniformBuffer(AppSceneObject& scene_object);
     void createSceneObjectDescriptorSet(AppSceneObject& scene_object);
+
+    // deferred =================================================
+    AppDeferredPipelineAssets deferred_;
+    std::vector<VkCommandBuffer> deferred_command_buffers_;
+    // HERE 0 put quad in here after all fo deferred
+    // is done
+    void prepareDeferred();
+    void prepareQuadVertexAndIndexBuffer();
+    void createDeferredUniformBuffer();
+    void createDeferredDescriptorSetLayout();
+    void createDeferredDescriptorSet();
+    void createDeferredPipelineLayout();
+    void createDeferredRenderPass();
+    // no need for frame buffer, in swap chain
+    void createDeferredPipeline();
+    void createDeferredCommandBuffer();
+    // helper
+    void createQuadVertexBuffer();
+    void createQuadIndexBuffer();
+
+    // general =================================================
+    void draw_new();
 };
 
 

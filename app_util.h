@@ -2,6 +2,7 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <string>
+#include <glm/glm.hpp>
 
 struct AppUniformBuffer {
     VkBuffer buffer;
@@ -55,13 +56,22 @@ struct AppSceneObject {
     } uniformBufferAndContent; 
 };
 
+struct AppDeferredUniformBufferContent {
+    glm::vec3 lightPos;
+};
+
 struct AppDeferredPipelineAssets {
     VkPipeline pipeline;
     VkPipelineLayout pipelineLayout;
     VkRenderPass renderPass;
     VkDescriptorSetLayout descriptorSetLayout;
-    VkCommandBuffer commandBuffer;
-    AppUniformBuffer lightUniformBuffer;
+    VkDescriptorSet descriptorSet;
+    VkCommandBuffer* commandBuffers;
+    int commandBufferCount;
+    struct {
+        AppUniformBuffer uniformBuffer;
+        AppDeferredUniformBufferContent content;
+    } uniformBufferAndContent;
     // output framebuf is swapchain framebuf
     // if do post processing
     // add a framebuffer to store image output
@@ -70,7 +80,6 @@ struct AppDeferredPipelineAssets {
 struct AppOffscreenUniformBufferContent {
     glm::mat4 projMatrix;
     glm::mat4 viewMatrix;
-
 };
 
 struct AppOffscreenPipelineAssets {
@@ -87,8 +96,9 @@ struct AppOffscreenPipelineAssets {
 
     struct {
         VkFramebuffer frameBuffer;
-        AppFramebufferAttachment position, normal, albedo;
-        AppFramebufferAttachment depth;
+        AppTexture position, normal, color, mrao;
+        AppTexture depth;
+        VkSampler sampler;
     } frameBufferAssets;
 };
 
@@ -117,6 +127,8 @@ namespace apputil {
         uint32_t dstBinding,
         const VkDescriptorImageInfo* pBuffepImageInforInfo,
         uint32_t descriptorCount);
+
+    VkCommandBufferBeginInfo cmdBufferBegin(VkCommandBufferUsageFlags flags);
 }
 
 
