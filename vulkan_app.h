@@ -285,7 +285,7 @@ private:
 
     void createDeferredCommandBuffers_old();
     void createSyncObjects();
-    void updateUniformBuffer(uint32_t currentImage, glm::mat4 modelMatrix);
+    void updateUniformBuffer_old(uint32_t currentImage, glm::mat4 modelMatrix);
 
     VkShaderModule createShaderModule(const std::vector<char>& code);
 
@@ -472,7 +472,7 @@ private:
     std::vector<AppSceneObject> scene_objects_;
     void prepareSceneObjectsData();
     void prepareSceneObjectsDescriptor();
-    void loadSceneObjectMesh(AppSceneObject& scene_object);
+    void loadSingleSceneObjectMesh(AppSceneObject& scene_object);
     void loadSingleSceneObjectTexture(AppTextureInfo& texture);
     void createModelMatrixUniformBuffer(AppSceneObject& scene_object);
     void createSceneObjectDescriptorSet(AppSceneObject& scene_object);

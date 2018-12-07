@@ -2,7 +2,14 @@
 #include "app_util.h"
 #include <tiny_obj_loader.h>
 #define TINYOBJLOADER_IMPLEMENTATION
-
+#define GLFW_INCLUDE_VULKAN
+#define GLM_FORCE_RADIANS
+#define STB_IMAGE_IMPLEMENTATION
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define TINYOBJLOADER_IMPLEMENTATION
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/transform.hpp>
 #include <stb_image.h>
 
 // Timers =================================================
@@ -21,6 +28,12 @@ void SET_GLOBAL_RECORD_TIME() {
 float GET_CLOBAL_TIME_GAP_SINCE_LAST_RECORD() {
     auto currentTime = std::chrono::high_resolution_clock::now();
     float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - LAST_RECORD_TIME).count();
+    return time;
+}
+
+float GET_CLOBAL_TIME_GAP_SINCE_START() {
+    auto currentTime = std::chrono::high_resolution_clock::now();
+    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - START_TIME).count();
     return time;
 }
 
@@ -49,7 +62,7 @@ double previousY = 0.0;
 Camera* orbitCam;
 
 void VulkanApp::initCam() {
-    orbitCam = new Camera((float)HEIGHT / WIDTH);
+    orbitCam = new Camera((float)WIDTH / HEIGHT);
 }
 
 void VulkanApp::mouseDownCallback(GLFWwindow* window, int button, int action, int mods) {
@@ -1444,7 +1457,7 @@ void VulkanApp::createHardCodeModelVertexBuffer() {
     vkFreeMemory(device_, stagingBufferMemory, nullptr);
 }
 
-void VulkanApp::loadSceneObjectMesh(AppSceneObject& object_struct) {
+void VulkanApp::loadSingleSceneObjectMesh(AppSceneObject& object_struct) {
     struct Vertex {
         float pos[3];
         float uv[2];
@@ -1463,18 +1476,28 @@ void VulkanApp::loadSceneObjectMesh(AppSceneObject& object_struct) {
     std::vector<tinyobj::material_t> materials;
     std::string warn, err;
 
+
+
     if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, file_path.c_str())) {
         throw std::runtime_error(warn + err);
     }
 
+    int colorRounding = 1333;
     for (const auto& shape : shapes) {
         // +3 for per triangle
         for (int i = 0; i < shape.mesh.indices.size(); i += 3) {
+            colorRounding += 1333333;
             Vertex verts[3];
             const tinyobj::index_t idx[] = {
                 shape.mesh.indices[i],
                 shape.mesh.indices[i + 1],
-                shape.mesh.indices[i + 2]};
+                shape.mesh.indices[i + 2] };
+
+            float colorVul[3];
+            colorVul[0] = (float)(colorRounding % 255) / (float)255;
+            colorRounding += 345256;
+            colorVul[1] = 0.f;
+            colorVul[2] = (float)(colorRounding % 255) / (float)255;
 
             for (int j = 0; j < 3; ++j) {
                 const auto& index = idx[j];
@@ -1486,13 +1509,13 @@ void VulkanApp::loadSceneObjectMesh(AppSceneObject& object_struct) {
                 vert.uv[0] = 1.0f - attrib.texcoords[2 * index.texcoord_index + 0];
                 vert.uv[1] = 1.0f - attrib.texcoords[2 * index.texcoord_index + 1];
 
-                vert.col[0] = 0.f;
-                vert.col[1] = 0.f;
-                vert.col[2] = 1.f;
+                vert.col[0] = colorVul[0];
+                vert.col[1] = colorVul[1];
+                vert.col[2] = colorVul[2];
 
-                vert.normal[0] = attrib.normals[3 * index.vertex_index + 2];
-                vert.normal[1] = attrib.normals[3 * index.vertex_index + 1];
-                vert.normal[2] = attrib.normals[3 * index.vertex_index + 0];
+                vert.normal[0] = attrib.normals[3 * index.normal_index + 2];
+                vert.normal[1] = attrib.normals[3 * index.normal_index + 1];
+                vert.normal[2] = attrib.normals[3 * index.normal_index + 0];
             }
 
             // clac tangent
@@ -1533,37 +1556,40 @@ void VulkanApp::loadSceneObjectMesh(AppSceneObject& object_struct) {
                 indices.push_back(indices.size());
             }
         }
-
-        //for (const auto& index : shape.mesh.indices) {
-        //    Vertex vertex = {};
-
-        //    vertex.pos[0] = attrib.vertices[3 * index.vertex_index + 2];
-        //    vertex.pos[1] = attrib.vertices[3 * index.vertex_index + 1];
-        //    vertex.pos[2] = attrib.vertices[3 * index.vertex_index + 0];
-
-        //    // IMPT
-        //    /*vertex.uv[0] = attrib.texcoords[2 * index.texcoord_index + 0];
-        //    vertex.uv[1] = attrib.texcoords[2 * index.texcoord_index + 1];*/
-
-        //    vertex.uv[0] = 1.0f - attrib.texcoords[2 * index.texcoord_index + 0];
-        //    vertex.uv[1] = 1.0f - attrib.texcoords[2 * index.texcoord_index + 1];
-
-        //    vertex.col[0] = 1.f;
-        //    vertex.col[1] = 0.f;
-        //    vertex.col[2] = 1.f;
-
-        //    vertex.normal[0] = attrib.normals[3 * index.vertex_index + 2];
-        //    vertex.normal[1] = attrib.normals[3 * index.vertex_index + 1];
-        //    vertex.normal[2] = attrib.normals[3 * index.vertex_index + 0];
-
-        //    vertex.tangent[0] = 0.3f;
-        //    vertex.tangent[1] = 0.6f;
-        //    vertex.tangent[2] = 0.3f;
-
-        //    vertices.push_back(vertex);
-        //    indices.push_back(indices.size());
-        //}
     }
+    //for (const auto& shape : shapes) {
+    //    for (const auto& index : shape.mesh.indices) {
+    //        colorRounding += 37;
+    //        Vertex vertex = {};
+
+    //        vertex.pos[0] = attrib.vertices[3 * index.vertex_index + 2];
+    //        vertex.pos[1] = attrib.vertices[3 * index.vertex_index + 1];
+    //        vertex.pos[2] = attrib.vertices[3 * index.vertex_index + 0];
+
+    //        // IMPT
+    //        /*vertex.uv[0] = attrib.texcoords[2 * index.texcoord_index + 0];
+    //        vertex.uv[1] = attrib.texcoords[2 * index.texcoord_index + 1];*/
+
+    //        vertex.uv[0] = 1.0f - attrib.texcoords[2 * index.texcoord_index + 0];
+    //        vertex.uv[1] = 1.0f - attrib.texcoords[2 * index.texcoord_index + 1];
+
+    //        vertex.col[0] = (float)(255 % colorRounding) / (float)255;
+    //        vertex.col[1] = 0.f;
+    //        vertex.col[2] = (float)(255 / colorRounding) / (float)255;
+
+    //        vertex.normal[0] = attrib.normals[3 * index.normal_index + 2];
+    //        vertex.normal[1] = attrib.normals[3 * index.normal_index + 1];
+    //        vertex.normal[2] = attrib.normals[3 * index.normal_index + 0];
+
+    //        vertex.tangent[0] = 0.3f;
+    //        vertex.tangent[1] = 0.6f;
+    //        vertex.tangent[2] = 0.3f;
+
+    //        vertices.push_back(vertex);
+    //        indices.push_back(indices.size());
+    //    }
+    //}
+
     object_struct.vertexCount = static_cast<uint32_t>(vertices.size());
     object_struct.indexCount = static_cast<uint32_t>(indices.size());
 
@@ -2258,7 +2284,7 @@ void VulkanApp::rt_updateUniformBuffer() {
     vkUnmapMemory(device_, uniformBuffers.rt_compute.deviceMem);
 }
 
-void VulkanApp::updateUniformBuffer(uint32_t currentImage, glm::mat4 modelMatrix) {
+void VulkanApp::updateUniformBuffer_old(uint32_t currentImage, glm::mat4 modelMatrix) {
     static auto startTime = std::chrono::high_resolution_clock::now();
 
     auto currentTime = std::chrono::high_resolution_clock::now();
@@ -2358,7 +2384,7 @@ void VulkanApp::draw()
     vkQueueWaitIdle(queue_);
 
     
-    updateUniformBuffer(imageIndex, glm::mat4(1.f));
+    updateUniformBuffer_old(imageIndex, glm::mat4(1.f));
 }
 
 
@@ -2890,29 +2916,24 @@ void VulkanApp::setupVertexDescriptions() {
     tanAttrDesc.format = VK_FORMAT_R32G32B32_SFLOAT;
     tanAttrDesc.offset = sizeof(float) * 11;
 
-    //vertices_new.attributeDescriptions = { posAttrDesc, uvAttrDesc,
-    //    colorAttrDesc, normalAttrDesc, tanAttrDesc };
-
     vertices_new.attributeDescriptions[0] = posAttrDesc;
     vertices_new.attributeDescriptions[1] = uvAttrDesc;
     vertices_new.attributeDescriptions[2] = colorAttrDesc;
     vertices_new.attributeDescriptions[3] = normalAttrDesc;
     vertices_new.attributeDescriptions[4] = tanAttrDesc;
 
-
     VkPipelineVertexInputStateCreateInfo inputStateInfo{};
     inputStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    inputStateInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(vertices_new.bindingDescriptions.size());
-    inputStateInfo.pVertexBindingDescriptions = vertices_new.bindingDescriptions.data();
+    inputStateInfo.vertexBindingDescriptionCount =
+        static_cast<uint32_t>(vertices_new.bindingDescriptions.size());
+    inputStateInfo.pVertexBindingDescriptions =
+        vertices_new.bindingDescriptions.data();
+    inputStateInfo.vertexAttributeDescriptionCount =
+        static_cast<uint32_t>(vertices_new.attributeDescriptions.size());
+    inputStateInfo.pVertexAttributeDescriptions =
+        vertices_new.attributeDescriptions.data();
 
-   // inputStateInfo.pVertexBindingDescriptions
-
-    inputStateInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertices_new.attributeDescriptions.size());
-    inputStateInfo.pVertexAttributeDescriptions = vertices_new.attributeDescriptions.data();
     vertices_new.inputState = inputStateInfo;
-    //uint32_t binding,
-    //    uint32_t stride,
-    //    VkVertexInputRate inputRate)
 }
 
 
@@ -3997,21 +4018,24 @@ void VulkanApp::createOffscreenCommandBuffer() {
 
     VkDeviceSize offsets[1] = { 0 };
 
-    // Draw scene object 0
-    vkCmdBindDescriptorSets(offscreen_.commandBuffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS, offscreen_.pipelineLayout, 0, 1,
-        &scene_objects_[0].descriptorSet, 0, NULL);
+    // draw models
+    for (auto& scene_object : scene_objects_) {
+        vkCmdBindDescriptorSets(offscreen_.commandBuffer,
+            VK_PIPELINE_BIND_POINT_GRAPHICS, offscreen_.pipelineLayout, 0, 1,
+            &scene_object.descriptorSet, 0, NULL);
 
-    vkCmdBindVertexBuffers(offscreen_.commandBuffer, 0, 1,
-        &scene_objects_[0].vertexBuffer.buffer, offsets);
+        vkCmdBindVertexBuffers(offscreen_.commandBuffer, 0, 1,
+            &scene_object.vertexBuffer.buffer, offsets);
 
-    vkCmdBindIndexBuffer(offscreen_.commandBuffer,
-        scene_objects_[0].indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindIndexBuffer(offscreen_.commandBuffer,
+            scene_object.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
 
-    vkCmdDrawIndexed(
-        offscreen_.commandBuffer,
-        static_cast<uint32_t>(indices_.size()),
-        1, 0, 0, 0);
+        vkCmdDrawIndexed(
+            offscreen_.commandBuffer,
+            static_cast<uint32_t>(scene_object.indexCount),
+            1, 0, 0, 0);
+    }
+    
 
     vkCmdEndRenderPass(offscreen_.commandBuffer);
 
@@ -4022,12 +4046,24 @@ void VulkanApp::createOffscreenCommandBuffer() {
 
 // scene objects =================================================
 void VulkanApp::prepareSceneObjectsData() {
-    AppSceneObject rock1{};
-    rock1.meshPath = "../../models/rock.obj";
-    rock1.albedo.path = "../../textures/rock_low_Base_Color.png";
-    rock1.normal.path = "../../textures/rock_low_Normal_DirectX.png";
-    rock1.mrao.path = "../../textures/rock_low_Normal_DirectX.png";
-    scene_objects_.push_back(rock1);
+    AppSceneObject rock{};
+    rock.meshPath = "../../models/rock.obj";
+    rock.albedo.path = "../../textures/rock_low_Base_Color.png";
+    rock.normal.path = "../../textures/rock_low_Normal_DirectX.png";
+    rock.mrao.path = "../../textures/rock_low_Normal_DirectX.png";
+    
+
+    AppSceneObject cube2{};
+    cube2.meshPath = "../../models/cube.obj";
+    cube2.albedo.path = "../../textures/uv_debug.png";
+    cube2.normal.path = "../../textures/normal_map_debug.png";
+    cube2.mrao.path = "../../textures/rock_low_Normal_DirectX.png";
+
+
+    scene_objects_.push_back(cube2);
+    scene_objects_.push_back(rock);
+
+
 
     // the following 2 functions must be called before scene object loading
     // scene object descriptor set requires offscreen uniform buffer and
@@ -4036,7 +4072,7 @@ void VulkanApp::prepareSceneObjectsData() {
     // createOffscreenUniformBuffer()
 
     for (auto& scene_object : scene_objects_) {
-        loadSceneObjectMesh(scene_object);
+        loadSingleSceneObjectMesh(scene_object);
         // texture
         // loadSceneObjectTexture(scene_object);
         loadSingleSceneObjectTexture(scene_object.albedo);
@@ -4682,11 +4718,24 @@ void VulkanApp::updateUniformBuffers() {
         &ocs_ubo, sizeof(ocs_ubo));   
 
     // scene object positions
-    auto& model_ubo = scene_objects_[0].uniformBufferAndContent.content;
-    model_ubo.modelMatrix = glm::mat4(1.f);
+    glm::mat4 modelMat;
+    float time = GET_CLOBAL_TIME_GAP_SINCE_START();
+
+    modelMat = glm::rotate(glm::mat4(1.0f),
+        time * glm::radians(90.0f), glm::vec3(10.0f, 10.0f, 10.0f));
+    auto& model0_ubo = scene_objects_[0].uniformBufferAndContent;
+    model0_ubo.content.modelMatrix = modelMat;
     uniformBufferCpy(
-        scene_objects_[0].uniformBufferAndContent.uniformBuffer.deviceMemory,
-        &model_ubo, sizeof(model_ubo));
+        model0_ubo.uniformBuffer.deviceMemory,
+        &model0_ubo.content, sizeof(model0_ubo.content));
+
+    modelMat = glm::scale(glm::vec3(2.f, 2.f, 2.f));
+    modelMat = glm::translate(glm::vec3(10.f, 10.f, 10.f));
+    auto& model1_ubo = scene_objects_[1].uniformBufferAndContent;
+    model1_ubo.content.modelMatrix = modelMat;
+    uniformBufferCpy(
+        model1_ubo.uniformBuffer.deviceMemory,
+        &model1_ubo.content, sizeof(model1_ubo.content));
 }
 
 void VulkanApp::uniformBufferCpy(VkDeviceMemory& device_memory, void* ubo_ptr,

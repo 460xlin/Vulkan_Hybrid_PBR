@@ -5,6 +5,7 @@
 
 layout (binding = 2) uniform sampler2D samplerColor;
 layout (binding = 3) uniform sampler2D samplerNormalMap;
+layout (binding = 4) uniform sampler2D samplerMrao;
 
 layout (location = 0) in vec3 inNormal;
 layout (location = 1) in vec2 inUV;
@@ -32,5 +33,4 @@ void main()
 	outNormal = vec4(normalize(tnorm), 1.0);
 
 	outAlbedo = texture(samplerColor, inUV);
-	// outAlbedo = vec4(ubo.deferredProj[0][0], ubo.deferredProj[0][1], ubo.deferredProj[0][2], 1.f);
 }
