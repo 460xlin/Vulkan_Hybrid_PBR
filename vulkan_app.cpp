@@ -12,6 +12,7 @@
 #include <glm/gtx/transform.hpp>
 #include <stb_image.h>
 #include <gli/gli.hpp>
+#include <glm/gtc/constants.hpp>
 
 // Timers =================================================
 std::chrono::time_point<std::chrono::steady_clock> START_TIME;
@@ -93,7 +94,7 @@ void VulkanApp::mouseMoveCallback(GLFWwindow* window, double xPosition, double y
         float deltaX = static_cast<float>((previousX - xPosition) * sensitivity);
         float deltaY = static_cast<float>((previousY - yPosition) * sensitivity);
 
-        orbitCam->UpdateOrbit(deltaX, deltaY, 0.0f);
+        orbitCam->UpdateRotation(deltaX, deltaY, 0.0f);
 
         previousX = xPosition;
         previousY = yPosition;
@@ -101,7 +102,7 @@ void VulkanApp::mouseMoveCallback(GLFWwindow* window, double xPosition, double y
     else if (rightMouseDown) {
         double deltaZ = static_cast<float>((previousY - yPosition) * 0.05);
 
-        orbitCam->UpdateOrbit(0.0f, 0.0f, deltaZ);
+        orbitCam->UpdateRotation(0.0f, 0.0f, deltaZ);
 
         previousY = yPosition;
     }
@@ -921,8 +922,8 @@ void VulkanApp::createGraphicsPipeline_old() {
  
 
     // Offscreen pipeline
-    shaderStages[0] = loadShader("C:/Users/Zichuan/Documents/Vulkan_Hybrid_PBR/shaders/mrt.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
-    shaderStages[1] = loadShader("C:/Users/Zichuan/Documents/Vulkan_Hybrid_PBR/shaders/mrt.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
+    shaderStages[0] = loadShader("../../shaders/mrt.vert.spv", VK_SHADER_STAGE_VERTEX_BIT);
+    shaderStages[1] = loadShader("../../shaders/mrt.frag.spv", VK_SHADER_STAGE_FRAGMENT_BIT);
 
     // change layout and render pass
     pipelineCreateInfo.pVertexInputState = &vertices_new.inputState;
@@ -5619,7 +5620,6 @@ void VulkanApp::draw_new() {
     vkQueueWaitIdle(queue_);
 }
 
-// general =================================================
 void VulkanApp::updateUniformBuffers() {
     // offscreen camera
     auto& ocs_ubo = offscreen_.uniformBufferAndContent.content;
@@ -5652,19 +5652,20 @@ void VulkanApp::updateUniformBuffers() {
         &model1_ubo.content, sizeof(model1_ubo.content));
 
 
-    glm::mat4 viewMatrix = glm::mat4(1.0f);
-    glm::mat4 projection = glm::perspective(glm::radians(60.0f), (float)WIDTH / (float)HEIGHT, 0.001f, 256.0f);
-
+    // skybox cam
     modelMat = glm::mat4(1.0f);
-    modelMat = viewMatrix * glm::translate(modelMat, glm::vec3(0, 0, 0));
-    modelMat = glm::rotate(modelMat, glm::radians(45.f), glm::vec3(1.0f, 0.0f, 0.0f));
-    modelMat = glm::rotate(modelMat, glm::radians(45.f), glm::vec3(0.0f, 1.0f, 0.0f));
-    modelMat = glm::rotate(modelMat, glm::radians(45.f), glm::vec3(0.0f, 0.0f, 1.0f));
+    glm::vec3 rotation =
+        getSkyboxCubeRoationRadianFromForward(orbitCam->GetForward());
+    modelMat = glm::rotate(modelMat, glm::radians(rotation.x),
+        glm::vec3(1.0f, 0.0f, 0.0f));
+    modelMat = glm::rotate(modelMat, glm::radians(rotation.y),
+        glm::vec3(0.0f, 1.0f, 0.0f));
+    modelMat = glm::rotate(modelMat, glm::radians(rotation.z),
+        glm::vec3(0.0f, 0.0f, 1.0f));
 
     auto& skybox_ubo = skybox_.uniformBufferAndContent;
-    skybox_ubo.content.modelMatrix = modelMat;
-    skybox_ubo.content.projMatrix = projection;
 
+    skybox_ubo.content.modelMatrix = modelMat;
     skybox_ubo.content.projMatrix = orbitCam->GetProjMat();
     skybox_ubo.content.viewMatrix = orbitCam->GetViewMat();
 
@@ -5673,12 +5674,26 @@ void VulkanApp::updateUniformBuffers() {
         &skybox_ubo.content, sizeof(skybox_ubo.content));
 }
 
+// helper
 void VulkanApp::uniformBufferCpy(VkDeviceMemory& device_memory, void* ubo_ptr,
     size_t size) {
     void* data;
     vkMapMemory(device_, device_memory, 0, size, 0, &data);
     memcpy(data, ubo_ptr, size);
     vkUnmapMemory(device_, device_memory);
+}
+
+glm::vec3 VulkanApp::getSkyboxCubeRoationRadianFromForward(const glm::vec3& forward) {
+    static glm::vec3 front(0.1f, 0.f, 0.f);
+    static glm::vec3 up(0.f, 1.f, 0.f);
+    static glm::vec3 right(0.f, 0.f, 1.f);
+    static glm::vec3 forwardN = glm::normalize(forward);
+    static glm::vec3 output;
+
+    output.x = glm::acos(glm::dot(forwardN, front)) * glm::pi<float>();
+    output.y = glm::acos(glm::dot(forwardN, up)) * glm::pi<float>();
+    output.z = glm::acos(glm::dot(forwardN, right)) * glm::pi<float>();
+    return output;
 }
 
 

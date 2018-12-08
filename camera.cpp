@@ -23,7 +23,8 @@ glm::mat4 Camera::GetProjMat() {
     return cameraBufferObject.projectionMatrix;
 }
 
-void Camera::UpdateOrbit(float deltaX, float deltaY, float deltaZ) {
+void Camera::UpdateRotation(float deltaX, float deltaY, float deltaZ) {
+
     theta += deltaX;
     phi += deltaY;
     r = glm::clamp(r - deltaZ, 1.0f, 50.0f);
@@ -33,6 +34,10 @@ void Camera::UpdateOrbit(float deltaX, float deltaY, float deltaZ) {
 
     glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), radTheta, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::rotate(glm::mat4(1.0f), radPhi, glm::vec3(1.0f, 0.0f, 0.0f));
     glm::mat4 finalTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f)) * rotation * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, r));
+
+    cameraBufferObject.viewMatrix = glm::inverse(finalTransform);
+
+    // --------------
 
     cameraBufferObject.viewMatrix = glm::inverse(finalTransform);
 }

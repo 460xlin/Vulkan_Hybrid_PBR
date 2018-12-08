@@ -163,6 +163,8 @@ namespace apputil {
         uint32_t descriptorCount);
 
     VkCommandBufferBeginInfo cmdBufferBegin(VkCommandBufferUsageFlags flags);
+
+    glm::vec3 getRoationRadianFromForward(const glm::vec3& forward);
 }
 
 

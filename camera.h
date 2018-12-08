@@ -30,5 +30,5 @@ public:
 
     ~Camera();
 
-    void UpdateOrbit(float deltaX, float deltaY, float deltaZ);
+    void UpdateRotation(float deltaX, float deltaY, float deltaZ);
 };

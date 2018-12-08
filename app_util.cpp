@@ -89,6 +89,4 @@ namespace apputil {
         beginInfo.flags = flags;
         return beginInfo;
     }
-
-
 }

@@ -539,6 +539,8 @@ private:
     void uniformBufferCpy(VkDeviceMemory& device_memory, void* ubo_ptr,
         size_t size);
 
+    glm::vec3 getSkyboxCubeRoationRadianFromForward(const glm::vec3& forward);
+
     
 };
 
