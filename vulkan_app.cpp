@@ -61,10 +61,10 @@ bool leftMouseDown = false;
 bool rightMouseDown = false;
 double previousX = 0.0;
 double previousY = 0.0;
-Camera* orbitCam;
+Camera* firstPersonCam;
 
 void VulkanApp::initCam() {
-    orbitCam = new Camera((float)WIDTH / HEIGHT);
+    firstPersonCam = new Camera(WIDTH, HEIGHT);
 }
 
 void VulkanApp::mouseDownCallback(GLFWwindow* window, int button, int action, int mods) {
@@ -90,47 +90,44 @@ void VulkanApp::mouseDownCallback(GLFWwindow* window, int button, int action, in
 
 void VulkanApp::mouseMoveCallback(GLFWwindow* window, double xPosition, double yPosition) {
     if (leftMouseDown) {
-        double sensitivity = 0.5;
-        float deltaX = static_cast<float>((previousX - xPosition) * sensitivity);
-        float deltaY = static_cast<float>((previousY - yPosition) * sensitivity);
+        double rotateSpeed = 0.3;
+        float deltaX = static_cast<float>((previousX - xPosition) * rotateSpeed);
+        float deltaY = static_cast<float>((previousY - yPosition) * rotateSpeed);
 
-        orbitCam->UpdateRotation(deltaX, deltaY, 0.0f);
+        firstPersonCam->RotateAboutUp(deltaX);
+        firstPersonCam->RotateAboutRight(-deltaY);
 
         previousX = xPosition;
-        previousY = yPosition;
-    }
-    else if (rightMouseDown) {
-        double deltaZ = static_cast<float>((previousY - yPosition) * 0.05);
-
-        orbitCam->UpdateRotation(0.0f, 0.0f, deltaZ);
-
         previousY = yPosition;
     }
 }
 
 void VulkanApp::keyDownCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
     float timeGap = GET_CLOBAL_TIME_GAP_SINCE_LAST_RECORD();
-    if (key == GLFW_KEY_W && action == GLFW_PRESS) {
+    float movementSpeed = 0.05f;
+    if (key == GLFW_KEY_W && (action == GLFW_KEY_LAST || GLFW_PRESS)) {
         // go forward
-
+        firstPersonCam->TranslateAlongLook(timeGap * movementSpeed);
     }
-    else if (key == GLFW_KEY_S && action == GLFW_PRESS) {
+    else if (key == GLFW_KEY_S && (action == GLFW_KEY_LAST || GLFW_PRESS)) {
         // go back
-
+        firstPersonCam->TranslateAlongLook(-timeGap * movementSpeed);
     }
-    else if (key == GLFW_KEY_A && action == GLFW_PRESS) {
+    else if (key == GLFW_KEY_A && (action == GLFW_KEY_LAST || GLFW_PRESS)) {
         // go left
-
+        firstPersonCam->TranslateAlongRight(-timeGap * movementSpeed);
     }
-    else if (key == GLFW_KEY_D && action == GLFW_PRESS) {
+    else if (key == GLFW_KEY_D && (action == GLFW_KEY_LAST || GLFW_PRESS)) {
         // go right
-
+        firstPersonCam->TranslateAlongRight(timeGap * movementSpeed);
     }
-    else if (key == GLFW_KEY_Q && action == GLFW_PRESS) {
+    else if (key == GLFW_KEY_Q && (action == GLFW_KEY_LAST || GLFW_PRESS)) {
         // go up
+        firstPersonCam->TranslateAlongUp(+timeGap * movementSpeed);
     }
-    else if (key == GLFW_KEY_E && action == GLFW_PRESS) {
+    else if (key == GLFW_KEY_E && (action == GLFW_KEY_LAST || GLFW_PRESS)) {
         // go down
+        firstPersonCam->TranslateAlongUp(timeGap * movementSpeed);
     }
 }
 
@@ -343,7 +340,7 @@ void VulkanApp::cleanup() {
 
     glfwTerminate();
 
-    delete orbitCam;
+    delete firstPersonCam;
 }
 
 void VulkanApp::recreateSwapChain() {
@@ -2313,8 +2310,8 @@ void VulkanApp::updateUniformBuffer_old(uint32_t currentImage, glm::mat4 modelMa
     // ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
     // ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
     
-    ubo.view = orbitCam->GetViewMat();
-    ubo.proj = orbitCam->GetProjMat();
+    ubo.view = firstPersonCam->GetView();
+    ubo.proj = firstPersonCam->GetProj();
     
 
     if (debugCam) {
@@ -4784,7 +4781,7 @@ void VulkanApp::createSkyboxPipeline()
     rasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
     // IMPT: check for back face
-    rasterizationState.cullMode = VK_CULL_MODE_FRONT_BIT;
+    rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rasterizationState.flags = 0;
     rasterizationState.depthClampEnable = VK_FALSE;
@@ -5624,8 +5621,8 @@ void VulkanApp::updateUniformBuffers() {
     // offscreen camera
     auto& ocs_ubo = offscreen_.uniformBufferAndContent.content;
 
-    ocs_ubo.projMatrix = orbitCam->GetProjMat();
-    ocs_ubo.viewMatrix = orbitCam->GetViewMat();
+    ocs_ubo.projMatrix = firstPersonCam->GetProj();
+    ocs_ubo.viewMatrix = firstPersonCam->GetView();
 
     uniformBufferCpy(
         offscreen_.uniformBufferAndContent.uniformBuffer.deviceMemory, 
@@ -5655,7 +5652,9 @@ void VulkanApp::updateUniformBuffers() {
     // skybox cam
     modelMat = glm::mat4(1.0f);
     glm::vec3 rotation =
-        getSkyboxCubeRoationRadianFromForward(orbitCam->GetForward());
+        getSkyboxCubeRoationRadianFromForward(firstPersonCam->GetForward());
+        //glm::vec3(1.f);
+
     modelMat = glm::rotate(modelMat, glm::radians(rotation.x),
         glm::vec3(1.0f, 0.0f, 0.0f));
     modelMat = glm::rotate(modelMat, glm::radians(rotation.y),
@@ -5666,8 +5665,8 @@ void VulkanApp::updateUniformBuffers() {
     auto& skybox_ubo = skybox_.uniformBufferAndContent;
 
     skybox_ubo.content.modelMatrix = modelMat;
-    skybox_ubo.content.projMatrix = orbitCam->GetProjMat();
-    skybox_ubo.content.viewMatrix = orbitCam->GetViewMat();
+    skybox_ubo.content.projMatrix = firstPersonCam->GetProj();
+    skybox_ubo.content.viewMatrix = firstPersonCam->GetView();
 
     uniformBufferCpy(
         skybox_ubo.uniformBuffer.deviceMemory,
@@ -5690,9 +5689,9 @@ glm::vec3 VulkanApp::getSkyboxCubeRoationRadianFromForward(const glm::vec3& forw
     static glm::vec3 forwardN = glm::normalize(forward);
     static glm::vec3 output;
 
-    output.x = glm::acos(glm::dot(forwardN, front)) * glm::pi<float>();
-    output.y = glm::acos(glm::dot(forwardN, up)) * glm::pi<float>();
-    output.z = glm::acos(glm::dot(forwardN, right)) * glm::pi<float>();
+    output.x = glm::acos(glm::dot(forwardN, up)) * glm::pi<float>() * 180.f;
+    output.y = glm::acos(glm::dot(forwardN, front)) * glm::pi<float>() * 180.f;
+    output.z = glm::acos(glm::dot(forwardN, right)) * glm::pi<float>() * 180.f;
     return output;
 }
 

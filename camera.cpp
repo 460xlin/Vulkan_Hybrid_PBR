@@ -1,74 +1,137 @@
+#include "camera.h"
+#include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 
-#define GLM_FORCE_RADIANS
-// Use Vulkan depth range of 0.0 to 1.0 instead of OpenGL
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#include <glm/gtc/matrix_transform.hpp>
-
-#include "Camera.h"
-
-Camera::Camera(float aspectRatio) {
-    r = 10.0f;
-    theta = 0.0f;
-    phi = 0.0f;
-    cameraBufferObject.viewMatrix = glm::lookAt(glm::vec3(0.0f, 1.0f, 10.0f), glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    cameraBufferObject.projectionMatrix = glm::perspective(glm::radians(45.0f), aspectRatio, 0.1f, 100.0f);
-    cameraBufferObject.projectionMatrix[1][1] *= -1; // y-coordinate is flipped
+Camera::Camera() :
+    Camera(400, 400)
+{
+    look = glm::vec3(0, 0, -1);
+    up = glm::vec3(0, 1, 0);
+    right = glm::vec3(1, 0, 0);
 }
 
-glm::mat4 Camera::GetViewMat() {
-    return cameraBufferObject.viewMatrix;
-}
-glm::mat4 Camera::GetProjMat() {
-    return cameraBufferObject.projectionMatrix;
-}
+Camera::Camera(unsigned int w, unsigned int h) :
+    Camera(w, h, glm::vec3(0, 0, 10), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0))
+{}
 
-void Camera::UpdateRotation(float deltaX, float deltaY, float deltaZ) {
-
-    theta += deltaX;
-    phi += deltaY;
-    r = glm::clamp(r - deltaZ, 1.0f, 50.0f);
-
-    float radTheta = glm::radians(theta);
-    float radPhi = glm::radians(phi);
-
-    glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), radTheta, glm::vec3(0.0f, 1.0f, 0.0f)) * glm::rotate(glm::mat4(1.0f), radPhi, glm::vec3(1.0f, 0.0f, 0.0f));
-    glm::mat4 finalTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f)) * rotation * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, r));
-
-    cameraBufferObject.viewMatrix = glm::inverse(finalTransform);
-
-    // --------------
-
-    cameraBufferObject.viewMatrix = glm::inverse(finalTransform);
+Camera::Camera(unsigned int w, unsigned int h, const glm::vec3 &e, const glm::vec3 &r, const glm::vec3 &worldUp) :
+    fovy(45),
+    width(w),
+    height(h),
+    near_clip(0.1f),
+    far_clip(1000.f),
+    eye(e),
+    ref(r),
+    world_up(worldUp)
+{
+    RecomputeAttributes();
 }
 
-glm::vec3 Camera::GetPos() {
-    return pos;
+Camera::Camera(const Camera &c) :
+    fovy(c.fovy),
+    width(c.width),
+    height(c.height),
+    near_clip(c.near_clip),
+    far_clip(c.far_clip),
+    aspect(c.aspect),
+    eye(c.eye),
+    ref(c.ref),
+    look(c.look),
+    up(c.up),
+    right(c.right),
+    world_up(c.world_up),
+    V(c.V),
+    H(c.H)
+{}
+
+
+void Camera::RecomputeAttributes()
+{
+    look = glm::normalize(ref - eye);
+    right = glm::normalize(glm::cross(look, world_up));
+    up = glm::cross(right, look);
+
+    float tan_fovy = tan(glm::radians(fovy / 2));
+    float len = glm::length(ref - eye);
+    aspect = width / height;
+    V = up * len*tan_fovy;
+    H = right * len*aspect*tan_fovy;
 }
 
-glm::vec3 Camera::GetForward() {
-    return forward;
+glm::mat4 Camera::GetViewProjMat()
+{
+    return glm::perspective(glm::radians(fovy),
+        width / (float)height,
+        near_clip, far_clip) * glm::lookAt(eye, ref, up);
 }
 
-void Camera::MoveForward(float deltaTime) {
-    pos += forward * deltaTime * tanslationSpeed;
-    UpdateViewMatrix();
+glm::mat4 Camera::GetView()
+{
+    glm::mat4 View = glm::lookAt(
+        eye,
+        ref,
+        up
+    );
+
+    return View;
 }
 
-void Camera::MoveRight(float deltaTime) {
-    pos += glm::cross(forward, up) * deltaTime * tanslationSpeed;
-    UpdateViewMatrix();
+glm::mat4 Camera::GetProj()
+{
+    glm::mat4 projectionMatrix = glm::perspective(
+        glm::radians(fovy), // The vertical Field of View, in radians: the amount of "zoom". Think "camera lens". Usually between 90° (extra wide) and 30° (quite zoomed in)
+        aspect,             // Aspect Ratio. Depends on the size of your window. Notice that 4/3 == 800/600 == 1280/960, sounds familiar ?
+        near_clip,               // Near clipping plane. Keep as big as possible, or you'll get precision issues.
+        far_clip             // Far clipping plane. Keep as little as possible.
+    );
+
+    return projectionMatrix;
 }
 
-void Camera::MoveUp(float deltaTime) {
-    pos += up * deltaTime * tanslationSpeed;
-    UpdateViewMatrix();
+glm::vec3 Camera::GetForward()
+{
+    return look;
 }
 
-void Camera::UpdateViewMatrix() {
-
+glm::vec3 Camera::GetPos()
+{
+    return eye;
 }
 
+void Camera::RotateAboutUp(float deg)
+{
+    glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), glm::radians(deg), up);
+    ref = ref - eye;
+    ref = glm::vec3(rotation * glm::vec4(ref, 1));
+    ref = ref + eye;
+    RecomputeAttributes();
+}
 
-Camera::~Camera() {
+void Camera::RotateAboutRight(float deg)
+{
+    glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), glm::radians(deg), right);
+    ref = ref - eye;
+    ref = glm::vec3(rotation * glm::vec4(ref, 1));
+    ref = ref + eye;
+    RecomputeAttributes();
+}
+
+void Camera::TranslateAlongLook(float amt)
+{
+    glm::vec3 translation = look * amt;
+    eye += translation;
+    ref += translation;
+}
+
+void Camera::TranslateAlongRight(float amt)
+{
+    glm::vec3 translation = right * amt;
+    eye += translation;
+    ref += translation;
+}
+void Camera::TranslateAlongUp(float amt)
+{
+    glm::vec3 translation = up * amt;
+    eye += translation;
+    ref += translation;
 }
