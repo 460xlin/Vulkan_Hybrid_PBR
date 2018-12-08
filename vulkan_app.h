@@ -477,6 +477,41 @@ private:
     void createModelMatrixUniformBuffer(AppSceneObject& scene_object);
     void createSceneObjectDescriptorSet(AppSceneObject& scene_object);
 
+    // skybox =================================================
+    AppSkyboxPipelineAssets skybox_;
+
+    VkPhysicalDeviceFeatures device_features_;
+    VkPhysicalDeviceFeatures enabled_device_features_{};
+    VkPhysicalDeviceMemoryProperties device_memory_properties_;
+
+    void prepareSkybox();
+    void prepareSkyboxTexture();
+    void loadSkyboxMesh();
+    void createSkyboxUniformBuffer();
+    void createSkyboxDescriptorSetLayout();
+    void createSkyboxDescriptorSet();
+    void createSkyboxPipelineLayout();
+    void createSkyboxRenderPass();
+    void createSkyboxPipeline();
+    void createSkyboxCommandBuffers();
+    // helper
+    void getEnabledFeatures();
+    uint32_t skybox_getMemoryType(uint32_t typeBits,
+        VkMemoryPropertyFlags properties,
+        VkBool32 *memTypeFound = nullptr);
+    // TODO: merge this in the original one
+    void skybox_transitionLayout(
+        VkCommandBuffer cmdbuffer,
+        VkImage image,
+        VkImageLayout oldImageLayout,
+        VkImageLayout newImageLayout,
+        VkImageSubresourceRange subresourceRange,
+        VkPipelineStageFlags srcStageMask,
+        VkPipelineStageFlags dstStageMask
+    );
+    // temp
+    void skybox_createSwapChainFramebuffers();
+
 
     // deferred =================================================
     AppDeferredPipelineAssets deferred_;
@@ -503,6 +538,8 @@ private:
     // helper
     void uniformBufferCpy(VkDeviceMemory& device_memory, void* ubo_ptr,
         size_t size);
+
+    
 };
 
 

@@ -99,6 +99,42 @@ struct AppOffscreenPipelineAssets {
     } frameBufferAssets;
 };
 
+struct AppSkyBoxUniformBufferContent {
+    glm::mat4 projMatrix;
+    glm::mat4 modelMatrix;
+    float lodBias = 0.0f;
+};
+
+
+struct AppSkyboxSceneObject {
+    AppSceneObject mesh;
+    struct {
+        AppTextureInfo textureInfo;
+        uint32_t width;
+        uint32_t height;
+        uint32_t mipLevels;
+    } cubemap;
+};
+
+
+struct AppSkyboxPipelineAssets {
+    struct {
+        AppSkyBoxUniformBufferContent content;
+        AppUniformBuffer uniformBuffer;
+    } uniformBufferAndContent;
+
+    VkPipeline pipeline;
+    VkPipelineLayout pipelineLayout;
+    VkRenderPass renderPass;
+    VkDescriptorSetLayout descriptorSetLayout;
+    // only one descriptorSet, in cube's descriptorSet
+    // VkDescriptorSet descriptorSet;
+    VkCommandBuffer commandBuffer;
+    AppSkyboxSceneObject skyBoxCube;
+};
+
+
+
 namespace apputil {
     VkDescriptorSetLayoutBinding createDescriptorSetLayoutBinding(
         uint32_t binding,
