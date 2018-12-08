@@ -191,20 +191,37 @@ void VulkanApp::initVulkan() {
     // scene objects need offscreen's ubo, so has to be before object
     
 
-    
+	prepareSkybox();
     prepareSceneObjectsData();
+
+	// in this prepare offscreen function,
+	// we prepare the renderpass and framebuffer 
+	// which will be used to create skybox pipeline
     prepareOffscreen();
+
+	// because create pipeline need renderpass which now is offscreen.renderpass
+	createSkyboxPipeline();
+
     prepareSceneObjectsDescriptor();
     prepareOffscreenCommandBuffer();
     // skybox
-    prepareSkybox();
 
-    // prepareDeferred();
-    
+    prepareDeferred();
+
+
+
+	// combine skybox and deferred 
+	//combineSkyboxAndDeferredRenderPass();
+	//combineSkyboxAndDeferredFramebuffers();
+
+	// but still need to initialize pipeline seperately for 2 parts
+	//createDeferredPipeline();
+
+	//combineSkyboxAndDeferredCommandBuffers();
 
     // not related started -------------------------------------------------
     // createRenderPass();
-    //
+    ////
     //createDescriptorSetLayout();
     //createDescriptorSets_quad_old();
     // createSwapChainFramebuffers_old();
@@ -227,9 +244,9 @@ void VulkanApp::initVulkan() {
     //// hader uses descriptor slot 0.0 error
     //createGraphicsPipeline_old();
     //createDeferredCommandBuffers_old();
-    ////createOffscreenCommandBuffer();
+    //createOffscreenCommandBuffer();
 
-    //createSyncObjects();
+    // createSyncObjects();
 
     //rt_prepareStorageBuffers();
     //rt_prepareTextureTarget(rt_result, VK_FORMAT_R8G8B8A8_UNORM);
@@ -3561,7 +3578,8 @@ void VulkanApp::prepareOffscreen() {
 }
 
 void VulkanApp::prepareOffscreenCommandBuffer() {
-    createOffscreenCommandBuffer();
+    //createOffscreenCommandBuffer();
+	createOffscreenForSkyboxAndModel();
 }
 
 void VulkanApp::createOffscreenUniformBuffer() {
@@ -3581,6 +3599,7 @@ void VulkanApp::createOffscreenUniformBuffer() {
     buffer_info.range = VK_WHOLE_SIZE;
 }
 
+// IMPT: Add skybox as a samplercube to offscreen
 void VulkanApp::createOffscreenDescriptorSetLayout() {
     std::vector<VkDescriptorSetLayoutBinding> bindings = {
         // binding 0: uniform buffer
@@ -3612,7 +3631,20 @@ void VulkanApp::createOffscreenDescriptorSetLayout() {
             4,
             VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
             1,
-            VK_SHADER_STAGE_FRAGMENT_BIT)
+            VK_SHADER_STAGE_FRAGMENT_BIT),
+		//// binding 5: cubemap texture
+		//apputil::createDescriptorSetLayoutBinding(
+		//	5,
+		//	VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		//	1,
+		//	VK_SHADER_STAGE_FRAGMENT_BIT),
+		//// binding 6: uniform buf (cam)
+		// apputil::createDescriptorSetLayoutBinding(
+		//	6,
+		//	VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		//	1,
+		//	VK_SHADER_STAGE_VERTEX_BIT)
+
     };
 
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
@@ -3813,6 +3845,7 @@ void VulkanApp::createOffscreenPipeline() {
     viewportState.scissorCount = 1;
     viewportState.flags = 0;
 
+
     VkPipelineMultisampleStateCreateInfo multisampleState{};
     multisampleState.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
@@ -3843,6 +3876,10 @@ void VulkanApp::createOffscreenPipeline() {
             blendAttachmentState,
             blendAttachmentState
     };
+
+	//std::array<VkPipelineColorBlendAttachmentState, 1> blendAttachmentStates = {
+	//	blendAttachmentState,
+	//};
 
     colorBlendState.attachmentCount = static_cast<uint32_t>(blendAttachmentStates.size());
     colorBlendState.pAttachments = blendAttachmentStates.data();
@@ -3880,11 +3917,11 @@ void VulkanApp::createOffscreenRenderPass() {
     VkFormat colorFormat = VK_FORMAT_R8G8B8A8_UNORM;
     VkFormat mraoFormat = VK_FORMAT_R8G8B8A8_UNORM;
     VkFormat depthFormat = findDepthFormat();
-
     // Set up separate renderpass with references to the color and depth attachments
+	uint32_t attachmentCount = 5;
     std::array<VkAttachmentDescription, 5> attachmentDescs = {};
 
-    for (uint32_t i = 0; i < 5; ++i)
+    for (uint32_t i = 0; i < attachmentCount; ++i)
     {
         attachmentDescs[i].samples = VK_SAMPLE_COUNT_1_BIT;
         attachmentDescs[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -3908,6 +3945,7 @@ void VulkanApp::createOffscreenRenderPass() {
     attachmentDescs[2].format = colorFormat;
     attachmentDescs[3].format = mraoFormat;
     attachmentDescs[4].format = depthFormat;
+
 
     std::vector<VkAttachmentReference> colorReferences;
     colorReferences.push_back({ 0, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL });
@@ -3980,10 +4018,29 @@ void VulkanApp::createOffscreenCommandBuffer() {
     VkCommandBufferBeginInfo cmdBufInfo{};
     cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
+	if (vkBeginCommandBuffer(offscreen_.commandBuffer, &cmdBufInfo) != VK_SUCCESS) {
+		throw std::runtime_error("failed to begin offscreen_.commandBuffer");
+	}
+
+
+	VkViewport viewport{};
+	viewport.width = swapchain_extent_.width;
+	viewport.height = swapchain_extent_.height;
+	viewport.minDepth = 0.f;
+	viewport.maxDepth = 1.f;
+	vkCmdSetViewport(offscreen_.commandBuffer, 0, 1, &viewport);
+
+	VkRect2D scissor{};
+	scissor.extent.width = swapchain_extent_.width;
+	scissor.extent.height = swapchain_extent_.height;
+	scissor.offset.x = 0;
+	scissor.offset.y = 0;
+	vkCmdSetScissor(offscreen_.commandBuffer, 0, 1, &scissor);
+
     std::array<VkClearValue, 5> clearValues;
     clearValues[0].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
     clearValues[1].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
-    clearValues[2].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
+    clearValues[2].color = { { 1.0f, 0.0f, 0.0f, 0.0f } };
     clearValues[3].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
     clearValues[4].depthStencil = { 1.0f, 0 };
 
@@ -3996,25 +4053,17 @@ void VulkanApp::createOffscreenCommandBuffer() {
     renderPassBeginInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
     renderPassBeginInfo.pClearValues = clearValues.data();
 
-    if (vkBeginCommandBuffer(offscreen_.commandBuffer, &cmdBufInfo) != VK_SUCCESS) {
-        throw std::runtime_error("failed to begin offscreen_.commandBuffer");
-    }
 
-    vkCmdBeginRenderPass(offscreen_.commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    VkViewport viewport{};
-    viewport.width = swapchain_extent_.width;
-    viewport.height = swapchain_extent_.height;
-    viewport.minDepth = 0.f;
-    viewport.maxDepth = 1.f;
-    vkCmdSetViewport(offscreen_.commandBuffer, 0, 1, &viewport);
 
-    VkRect2D scissor{};
-    scissor.extent.width = swapchain_extent_.width;
-    scissor.extent.height = swapchain_extent_.height;
-    scissor.offset.x = 0;
-    scissor.offset.y = 0;
-    vkCmdSetScissor(offscreen_.commandBuffer, 0, 1, &scissor);
+
+
+
+	vkCmdBeginRenderPass(offscreen_.commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+
+
+
 
     vkCmdBindPipeline(
         offscreen_.commandBuffer,
@@ -4022,6 +4071,7 @@ void VulkanApp::createOffscreenCommandBuffer() {
         offscreen_.pipeline);
 
     VkDeviceSize offsets[1] = { 0 };
+
 
     // draw models
     for (auto& scene_object : scene_objects_) {
@@ -4041,6 +4091,26 @@ void VulkanApp::createOffscreenCommandBuffer() {
             1, 0, 0, 0);
     }
     
+
+	bool use_skybox = false;
+	if (use_skybox)
+	{
+		vkCmdBindDescriptorSets(offscreen_.commandBuffer,
+			VK_PIPELINE_BIND_POINT_GRAPHICS, offscreen_.pipelineLayout, 0, 1,
+			&skybox_.skyBoxCube.mesh.descriptorSet, 0, NULL);
+
+		vkCmdBindVertexBuffers(offscreen_.commandBuffer, 0, 1,
+			&skybox_.skyBoxCube.mesh.vertexBuffer.buffer, offsets);
+
+		vkCmdBindIndexBuffer(offscreen_.commandBuffer,
+			skybox_.skyBoxCube.mesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+		vkCmdDrawIndexed(
+			offscreen_.commandBuffer,
+			skybox_.skyBoxCube.mesh.indexCount,
+			1, 0, 0, 0);
+	}
+
 
     vkCmdEndRenderPass(offscreen_.commandBuffer);
 
@@ -4093,6 +4163,8 @@ void VulkanApp::prepareSceneObjectsDescriptor() {
         // allocate descriptor
         createSceneObjectDescriptorSet(scene_object);
     }
+	//auto& skybox_scene_object = skybox_.skyBoxCube.mesh;
+	//createSceneObjectDescriptorSet(skybox_scene_object);
 }
 
 void VulkanApp::loadSingleSceneObjectTexture(AppTextureInfo& texture_info) {
@@ -4186,6 +4258,7 @@ void VulkanApp::createSceneObjectDescriptorSet(AppSceneObject& scene_object) {
     allocInfo.descriptorSetCount = 1;
     allocInfo.pSetLayouts = &offscreen_.descriptorSetLayout;
 
+
     if (vkAllocateDescriptorSets(device_, &allocInfo,
         &scene_object.descriptorSet) != VK_SUCCESS)
     {
@@ -4230,7 +4303,22 @@ void VulkanApp::createSceneObjectDescriptorSet(AppSceneObject& scene_object) {
             VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
             4,
             &scene_object.mrao.texture.descriptorImageInfo,
-            1)
+            1),
+		//// binding 5: cube map tex
+		//apputil::createImageWriteDescriptorSet(
+		//	scene_object.descriptorSet,
+		//	VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+		//	5,
+		//	&skybox_.skyBoxCube.cubemap.textureInfo.texture.descriptorImageInfo,
+		//	1),
+		//// binding 6: uniform buf (cam)
+		//apputil::createBufferWriteDescriptorSet(
+		//	scene_object.descriptorSet,
+		//	VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+		//	6,
+		//	&skybox_.uniformBufferAndContent.uniformBuffer
+		//	.descriptorBufferInfo,
+		//	1),
     };
 
     vkUpdateDescriptorSets(device_, static_cast<uint32_t>(write_sets.size()),
@@ -4265,10 +4353,6 @@ void VulkanApp::prepareSkybox() {
     createSkyboxDescriptorSetLayout();
     createSkyboxDescriptorSet();
     createSkyboxPipelineLayout();
-    createSkyboxRenderPass();
-    skybox_createSwapChainFramebuffers();
-    createSkyboxPipeline();
-    createSkyboxCommandBuffers();
 }
 
 
@@ -4679,96 +4763,6 @@ void VulkanApp::createSkyboxPipelineLayout() {
     }
 }
 
-
-
-void VulkanApp::createSkyboxRenderPass() {
-    // still black box here
-    VkAttachmentDescription colorAttachment = {};
-    colorAttachment.format = swapchain_imageformat_;
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-    VkAttachmentDescription depthAttachment = {};
-    depthAttachment.format = findDepthFormat();
-    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    depthAttachment.finalLayout =
-        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference colorAttachmentRef = {};
-    colorAttachmentRef.attachment = 0;
-    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference depthAttachmentRef = {};
-    depthAttachmentRef.attachment = 1;
-    depthAttachmentRef.layout =
-        VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkSubpassDescription subpass = {};
-    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    subpass.colorAttachmentCount = 1;
-    subpass.pColorAttachments = &colorAttachmentRef;
-    // TODO do what?
-    subpass.pDepthStencilAttachment = &depthAttachmentRef;
-    subpass.inputAttachmentCount = 0;
-    subpass.pInputAttachments = nullptr;
-    subpass.preserveAttachmentCount = 0;
-    subpass.pPreserveAttachments = nullptr;
-    subpass.pResolveAttachments = nullptr;
-
-    // Subpass dependencies for layout transitions
-    std::array<VkSubpassDependency, 2> dependencies;
-
-    dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-    dependencies[0].dstSubpass = 0;
-    dependencies[0].srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-    dependencies[0].dstStageMask =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[0].srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-    dependencies[0].dstAccessMask =
-        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
-        | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-    dependencies[1].srcSubpass = 0;
-    dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-    dependencies[1].srcStageMask =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-    dependencies[1].dstStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-    dependencies[1].srcAccessMask =
-        VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
-        | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependencies[1].dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-    dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-    std::array<VkAttachmentDescription, 2> attachments = {
-        colorAttachment, depthAttachment
-    };
-
-    VkRenderPassCreateInfo renderPassInfo = {};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-    renderPassInfo.pAttachments = attachments.data();
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-    renderPassInfo.pDependencies = dependencies.data();
-
-    if (vkCreateRenderPass(device_, &renderPassInfo, nullptr,
-        &skybox_.renderPass) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create skybox_.renderPass pass!");
-    }
-}
-
 void VulkanApp::createSkyboxPipeline()
 {
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyState{};
@@ -4834,8 +4828,12 @@ void VulkanApp::createSkyboxPipeline()
         "../../shaders/skybox.frag.spv",
         VK_SHADER_STAGE_FRAGMENT_BIT);
 
-    std::array<VkPipelineColorBlendAttachmentState, 1> blendAttachmentStates = {
-            blendAttachmentState
+	std::array<VkPipelineColorBlendAttachmentState, 4> blendAttachmentStates = {
+			blendAttachmentState,
+			blendAttachmentState,
+			blendAttachmentState,
+			blendAttachmentState
+
     };
 
     colorBlendState.attachmentCount =
@@ -4845,7 +4843,10 @@ void VulkanApp::createSkyboxPipeline()
     VkGraphicsPipelineCreateInfo pipelineCreateInfo{};
     pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipelineCreateInfo.layout = skybox_.pipelineLayout;
-    pipelineCreateInfo.renderPass = skybox_.renderPass;
+	// TODO: combine skybox and offscreen, so ues offscreen.rendepass
+    // pipelineCreateInfo.renderPass = skybox_.renderPass;
+	pipelineCreateInfo.renderPass = offscreen_.renderPass;
+
     pipelineCreateInfo.flags = 0;
     pipelineCreateInfo.basePipelineIndex = -1;
     pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
@@ -4867,125 +4868,6 @@ void VulkanApp::createSkyboxPipeline()
     }
 }
 
-void VulkanApp::createSkyboxCommandBuffers() {
-    deferred_command_buffers_.resize(swapchain_images_.size());
-
-    VkCommandBufferAllocateInfo allocInfo = {};
-    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-    allocInfo.commandPool = command_pool_;
-    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = (uint32_t)deferred_command_buffers_.size();
-
-    if (vkAllocateCommandBuffers(
-        device_, &allocInfo, deferred_command_buffers_.data()) != VK_SUCCESS) {
-
-        throw std::runtime_error(
-            "failed to allocate skybox command buffers!");
-    }
-
-    for (size_t i = 0; i < deferred_command_buffers_.size(); i++) {
-        VkCommandBufferBeginInfo beginInfo = apputil::cmdBufferBegin(
-            VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT);
-
-        if (vkBeginCommandBuffer(deferred_command_buffers_[i], &beginInfo)
-            != VK_SUCCESS) {
-
-            throw std::runtime_error(
-                "failed to begin recording deferred_command_buffer_s!");
-        }
-
-        VkRenderPassBeginInfo renderPassInfo = {};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = skybox_.renderPass;
-        renderPassInfo.framebuffer = swapchain_framebuffers_[i];
-        renderPassInfo.renderArea.offset = { 0, 0 };
-        renderPassInfo.renderArea.extent = swapchain_extent_;
-
-        std::array<VkClearValue, 2> clearValues = {};
-        clearValues[0].color = { 0.3f, 0.0f, 0.3f, 1.0f };
-        clearValues[1].depthStencil = { 1.0f, 0 };
-
-        renderPassInfo.clearValueCount =
-            static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
-
-        vkCmdBeginRenderPass(deferred_command_buffers_[i], &renderPassInfo,
-            VK_SUBPASS_CONTENTS_INLINE);
-
-        VkViewport viewport{};
-        viewport.width = swapchain_extent_.width;
-        viewport.height = swapchain_extent_.height;
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        vkCmdSetViewport(deferred_command_buffers_[i], 0, 1, &viewport);
-
-        VkRect2D scissor{};
-        scissor.extent.width = swapchain_extent_.width;
-        scissor.extent.height = swapchain_extent_.height;
-        scissor.offset.x = 0.0f;
-        scissor.offset.y = 1.0f;
-        vkCmdSetScissor(deferred_command_buffers_[i], 0, 1, &scissor);
-
-        VkDeviceSize offsets[1] = { 0 };
-
-        vkCmdBindDescriptorSets(deferred_command_buffers_[i],
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
-            skybox_.pipelineLayout, 0, 1,
-            &skybox_.skyBoxCube.mesh.descriptorSet, 0, nullptr);
-
-        vkCmdBindPipeline(deferred_command_buffers_[i],
-            VK_PIPELINE_BIND_POINT_GRAPHICS, skybox_.pipeline);
-
-
-        /*vkCmdBindVertexBuffers(deferred_command_buffers_[i], 0, 1,
-            &skybox_.skyBoxCube.mesh.vertexBuffer.buffer, offsets);
-        vkCmdBindIndexBuffer(deferred_command_buffers_[i],
-            skybox_.skyBoxCube.mesh.indexBuffer.buffer, 0,
-            VK_INDEX_TYPE_UINT32);*/
-
-        vkCmdBindVertexBuffers(deferred_command_buffers_[i], 0, 1,
-            &skybox_.skyBoxCube.mesh.vertexBuffer.buffer, offsets);
-        vkCmdBindIndexBuffer(deferred_command_buffers_[i],
-            skybox_.skyBoxCube.mesh.indexBuffer.buffer, 0,
-            VK_INDEX_TYPE_UINT32);
-
-        vkCmdDrawIndexed(deferred_command_buffers_[i],
-            skybox_.skyBoxCube.mesh.indexCount,
-            1, 0, 0, 1);
-        vkCmdEndRenderPass(deferred_command_buffers_[i]);
-
-        if (vkEndCommandBuffer(deferred_command_buffers_[i]) != VK_SUCCESS) {
-            throw std::runtime_error(
-                "failed to end skybox_command_buffer_s!");
-        }
-    }
-}
-
-void VulkanApp::skybox_createSwapChainFramebuffers() {
-    swapchain_framebuffers_.resize(swapchain_imageviews_.size());
-
-    for (size_t i = 0; i < swapchain_imageviews_.size(); i++) {
-
-        std::vector<VkImageView> attachments = {
-            swapchain_imageviews_[i],
-            depth_attachment_.imageView
-        };
-
-        VkFramebufferCreateInfo framebufferInfo = {};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        // IMPT
-        framebufferInfo.renderPass = skybox_.renderPass;
-        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        framebufferInfo.pAttachments = attachments.data();
-        framebufferInfo.width = swapchain_extent_.width;
-        framebufferInfo.height = swapchain_extent_.height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(device_, &framebufferInfo, nullptr, &swapchain_framebuffers_[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create framebuffer!");
-        }
-    }
-}
 
 void VulkanApp::getEnabledFeatures()
 {
@@ -5172,9 +5054,10 @@ void VulkanApp::prepareDeferred() {
     createDeferredPipelineLayout();
     createDeferredRenderPass();
     createSwapChainFramebuffers();
-    createDeferredPipeline();
+	// TODO: move create pipeline to initVUlkan
+     createDeferredPipeline();
     // TODO:
-    // createDeferredCommandBuffer();
+     createDeferredCommandBuffer();
 }
 
 void VulkanApp::createDeferredUniformBuffer() {
@@ -5226,7 +5109,13 @@ void VulkanApp::createDeferredDescriptorSetLayout() {
             4,
             VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
             1,
-            VK_SHADER_STAGE_FRAGMENT_BIT)
+            VK_SHADER_STAGE_FRAGMENT_BIT),
+		// binding 5: cube map texture
+		apputil::createDescriptorSetLayoutBinding(
+			5,
+			VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+			1,
+			VK_SHADER_STAGE_FRAGMENT_BIT)
     };
 
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
@@ -5696,6 +5585,151 @@ glm::vec3 VulkanApp::getSkyboxCubeRoationRadianFromForward(const glm::vec3& forw
 }
 
 
+// tryout2: combine skybox and offscrenn =================================================
+
+void VulkanApp::createOffscreenForSkyboxAndModel() {
+	if (offscreen_.commandBuffer == VK_NULL_HANDLE)
+	{
+		VkCommandBufferAllocateInfo cmdBufAllocateInfo{};
+		cmdBufAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		cmdBufAllocateInfo.commandPool = command_pool_;
+		cmdBufAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		cmdBufAllocateInfo.commandBufferCount = 1;
+		if (vkAllocateCommandBuffers(device_, &cmdBufAllocateInfo, &offscreen_.commandBuffer) != VK_SUCCESS) {
+			throw std::runtime_error("failed to create offscreenCommandBuffer");
+		}
+	}
+
+	VkSemaphoreCreateInfo semaphoreCreateInfo{};
+	semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+	if (vkCreateSemaphore(device_, &semaphoreCreateInfo, nullptr, &offscreenSemaphore) != VK_SUCCESS) {
+		throw std::runtime_error("failed to create offscreenSemaphore");
+	}
+
+	VkCommandBufferBeginInfo cmdBufInfo{};
+	cmdBufInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+	if (vkBeginCommandBuffer(offscreen_.commandBuffer, &cmdBufInfo) != VK_SUCCESS) {
+		throw std::runtime_error("failed to begin offscreen_.commandBuffer");
+	}
+
+	// IMPT: to draw models, use viewport from 0 to n;
+	float n_depth = 0.9999999f;
+	VkViewport viewport{};
+	viewport.width = swapchain_extent_.width;
+	viewport.height = swapchain_extent_.height;
+	viewport.minDepth = 0.f;
+	viewport.maxDepth = n_depth;
+	vkCmdSetViewport(offscreen_.commandBuffer, 0, 1, &viewport);
+
+	VkRect2D scissor{};
+	scissor.extent.width = swapchain_extent_.width;
+	scissor.extent.height = swapchain_extent_.height;
+	scissor.offset.x = 0;
+	scissor.offset.y = 0;
+	vkCmdSetScissor(offscreen_.commandBuffer, 0, 1, &scissor);
 
 
+	std::array<VkClearValue, 5> clearValues;
+	clearValues[0].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
+	clearValues[1].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
+	clearValues[2].color = { { 1.0f, 0.0f, 0.0f, 0.0f } };
+	clearValues[3].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
+	clearValues[4].depthStencil = { 1.0f, 0 };
+
+	VkRenderPassBeginInfo renderPassBeginInfo{};
+	renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	renderPassBeginInfo.renderPass = offscreen_.renderPass;
+	renderPassBeginInfo.framebuffer = offscreen_.frameBufferAssets.frameBuffer;
+	renderPassBeginInfo.renderArea.extent.width = swapchain_extent_.width;
+	renderPassBeginInfo.renderArea.extent.height = swapchain_extent_.height;
+	renderPassBeginInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+	renderPassBeginInfo.pClearValues = clearValues.data();
+
+	vkCmdBeginRenderPass(offscreen_.commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+
+
+	VkDeviceSize offsets[1] = { 0 };
+
+	vkCmdBindPipeline(
+		offscreen_.commandBuffer,
+		VK_PIPELINE_BIND_POINT_GRAPHICS,
+		offscreen_.pipeline);
+
+	// draw models
+	for (auto& scene_object : scene_objects_) {
+
+
+
+		vkCmdBindDescriptorSets(offscreen_.commandBuffer,
+			VK_PIPELINE_BIND_POINT_GRAPHICS, offscreen_.pipelineLayout, 0, 1,
+			&scene_object.descriptorSet, 0, NULL);
+
+		vkCmdBindVertexBuffers(offscreen_.commandBuffer, 0, 1,
+			&scene_object.vertexBuffer.buffer, offsets);
+
+		vkCmdBindIndexBuffer(offscreen_.commandBuffer,
+			scene_object.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+		vkCmdDrawIndexed(
+			offscreen_.commandBuffer,
+			static_cast<uint32_t>(scene_object.indexCount),
+			1, 0, 0, 0);
+	}
+
+
+
+
+
+	// IMPT: 
+	// since the renderpass is only related to framebuffers and clearvalue
+	// we use the same renderpass but different pipeline
+	// 1. change viewport and scissor for command buffer
+	VkViewport viewport_2{};
+	viewport_2.width = swapchain_extent_.width;
+	viewport_2.height = swapchain_extent_.height;
+	viewport_2.minDepth = n_depth;
+	viewport_2.maxDepth = 1.0f;
+	vkCmdSetViewport(offscreen_.commandBuffer, 0, 1, &viewport_2);
+
+	VkRect2D scissor_2{};
+	scissor_2.extent.width = swapchain_extent_.width;
+	scissor_2.extent.height = swapchain_extent_.height;
+	scissor_2.offset.x = 0;
+	scissor_2.offset.y = 0;
+	vkCmdSetScissor(offscreen_.commandBuffer, 0, 1, &scissor_2);
+
+	//2. change pipeline from offscreen from skybox
+	bool use_skybox = true;
+	if (use_skybox)
+	{
+		vkCmdBindPipeline(
+			offscreen_.commandBuffer,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			skybox_.pipeline);
+
+		vkCmdBindDescriptorSets(offscreen_.commandBuffer,
+			VK_PIPELINE_BIND_POINT_GRAPHICS, skybox_.pipelineLayout, 0, 1,
+			&skybox_.skyBoxCube.mesh.descriptorSet, 0, NULL);
+
+		vkCmdBindVertexBuffers(offscreen_.commandBuffer, 0, 1,
+			&skybox_.skyBoxCube.mesh.vertexBuffer.buffer, offsets);
+
+		vkCmdBindIndexBuffer(offscreen_.commandBuffer,
+			skybox_.skyBoxCube.mesh.indexBuffer.buffer, 0, VK_INDEX_TYPE_UINT32);
+
+		vkCmdDrawIndexed(
+			offscreen_.commandBuffer,
+			skybox_.skyBoxCube.mesh.indexCount,
+			1, 0, 0, 0);
+	}
+
+	vkCmdEndRenderPass(offscreen_.commandBuffer);
+
+	if (vkEndCommandBuffer(offscreen_.commandBuffer) != VK_SUCCESS) {
+		throw std::runtime_error("failed to end offscreenCommandBuffer");
+	}
+}
 

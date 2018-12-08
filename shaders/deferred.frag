@@ -81,5 +81,7 @@ void main()
 	outFragcolor = texture(samplerAlbedo, inUV);
 	outFragcolor = vec4(normalize(vec3(texture(samplerNormal, inUV))), 1.f);
 	outFragcolor = vec4((normal + vec3(1.f)) / 2.f, 1.f);
-	outFragcolor = vec4(fragcolor * 2.5, 1.0);
+	// outFragcolor = vec4(fragcolor * 2.5, 1.0);
+	outFragcolor = texture(samplerAlbedo, inUV);
+
 }

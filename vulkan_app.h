@@ -491,9 +491,7 @@ private:
     void createSkyboxDescriptorSetLayout();
     void createSkyboxDescriptorSet();
     void createSkyboxPipelineLayout();
-    void createSkyboxRenderPass();
     void createSkyboxPipeline();
-    void createSkyboxCommandBuffers();
     // helper
     void getEnabledFeatures();
     uint32_t skybox_getMemoryType(uint32_t typeBits,
@@ -509,8 +507,7 @@ private:
         VkPipelineStageFlags srcStageMask,
         VkPipelineStageFlags dstStageMask
     );
-    // temp
-    void skybox_createSwapChainFramebuffers();
+
 
 
     // deferred =================================================
@@ -541,7 +538,10 @@ private:
 
     glm::vec3 getSkyboxCubeRoationRadianFromForward(const glm::vec3& forward);
 
-    
+
+
+	// tryout =================================================
+	void createOffscreenForSkyboxAndModel();
 };
 
 
