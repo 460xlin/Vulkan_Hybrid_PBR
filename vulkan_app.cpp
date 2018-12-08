@@ -193,12 +193,14 @@ void VulkanApp::initVulkan() {
     // scene objects need offscreen's ubo, so has to be before object
     
 
-    // skybox
-    prepareSkybox();
+    
     prepareSceneObjectsData();
     prepareOffscreen();
     prepareSceneObjectsDescriptor();
     prepareOffscreenCommandBuffer();
+    // skybox
+    prepareSkybox();
+
     // prepareDeferred();
     
 
@@ -4438,6 +4440,7 @@ void VulkanApp::prepareSkyboxTexture()
             bufferCopyRegion.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
             bufferCopyRegion.imageSubresource.mipLevel = level;
             bufferCopyRegion.imageSubresource.baseArrayLayer = face;
+            // TODO: check layerCount
             bufferCopyRegion.imageSubresource.layerCount = 1;
             bufferCopyRegion.imageExtent.width = texCube[face][level].extent().x;
             bufferCopyRegion.imageExtent.height = texCube[face][level].extent().y;
@@ -4579,7 +4582,7 @@ void VulkanApp::prepareSkyboxTexture()
 }
 
 void VulkanApp::loadSkyboxMesh() {
-    skybox_.skyBoxCube.mesh.meshPath = "../../models/cubemap_cube.obj";
+    skybox_.skyBoxCube.mesh.meshPath = "../../models/cube.obj";
     loadSingleSceneObjectMesh(skybox_.skyBoxCube.mesh);
 }
 
@@ -4780,8 +4783,8 @@ void VulkanApp::createSkyboxPipeline()
     rasterizationState.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
     rasterizationState.polygonMode = VK_POLYGON_MODE_FILL;
     // IMPT: check for back face
-    rasterizationState.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizationState.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizationState.cullMode = VK_CULL_MODE_FRONT_BIT;
+    rasterizationState.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rasterizationState.flags = 0;
     rasterizationState.depthClampEnable = VK_FALSE;
     rasterizationState.lineWidth = 1.0f;
@@ -4895,7 +4898,7 @@ void VulkanApp::createSkyboxCommandBuffers() {
 
         VkRenderPassBeginInfo renderPassInfo = {};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = skybox_.renderPass;;
+        renderPassInfo.renderPass = skybox_.renderPass;
         renderPassInfo.framebuffer = swapchain_framebuffers_[i];
         renderPassInfo.renderArea.offset = { 0, 0 };
         renderPassInfo.renderArea.extent = swapchain_extent_;
@@ -4934,12 +4937,22 @@ void VulkanApp::createSkyboxCommandBuffers() {
 
         vkCmdBindPipeline(deferred_command_buffers_[i],
             VK_PIPELINE_BIND_POINT_GRAPHICS, skybox_.pipeline);
+
+
+        /*vkCmdBindVertexBuffers(deferred_command_buffers_[i], 0, 1,
+            &skybox_.skyBoxCube.mesh.vertexBuffer.buffer, offsets);
+        vkCmdBindIndexBuffer(deferred_command_buffers_[i],
+            skybox_.skyBoxCube.mesh.indexBuffer.buffer, 0,
+            VK_INDEX_TYPE_UINT32);*/
+
         vkCmdBindVertexBuffers(deferred_command_buffers_[i], 0, 1,
             &skybox_.skyBoxCube.mesh.vertexBuffer.buffer, offsets);
         vkCmdBindIndexBuffer(deferred_command_buffers_[i],
             skybox_.skyBoxCube.mesh.indexBuffer.buffer, 0,
             VK_INDEX_TYPE_UINT32);
-        vkCmdDrawIndexed(deferred_command_buffers_[i], static_cast<uint32_t>(6),
+
+        vkCmdDrawIndexed(deferred_command_buffers_[i],
+            skybox_.skyBoxCube.mesh.indexCount,
             1, 0, 0, 1);
         vkCmdEndRenderPass(deferred_command_buffers_[i]);
 
@@ -5651,6 +5664,10 @@ void VulkanApp::updateUniformBuffers() {
     auto& skybox_ubo = skybox_.uniformBufferAndContent;
     skybox_ubo.content.modelMatrix = modelMat;
     skybox_ubo.content.projMatrix = projection;
+
+    skybox_ubo.content.projMatrix = orbitCam->GetProjMat();
+    skybox_ubo.content.viewMatrix = orbitCam->GetViewMat();
+
     uniformBufferCpy(
         skybox_ubo.uniformBuffer.deviceMemory,
         &skybox_ubo.content, sizeof(skybox_ubo.content));

@@ -101,6 +101,7 @@ struct AppOffscreenPipelineAssets {
 
 struct AppSkyBoxUniformBufferContent {
     glm::mat4 projMatrix;
+    glm::mat4 viewMatrix;
     glm::mat4 modelMatrix;
     float lodBias = 0.0f;
 };
