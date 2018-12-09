@@ -58,6 +58,7 @@ struct AppSceneObject {
 struct AppDeferredUniformBufferContent {
     glm::vec3 eyePos;
     glm::vec3 lightPos;
+    glm::mat4 modelView;
 };
 
 struct AppDeferredPipelineAssets {
@@ -167,6 +168,8 @@ namespace apputil {
         uint32_t descriptorCount);
 
     VkCommandBufferBeginInfo cmdBufferBegin(VkCommandBufferUsageFlags flags);
+
+    void printVec3(const glm::vec3& vector);
 }
 
 

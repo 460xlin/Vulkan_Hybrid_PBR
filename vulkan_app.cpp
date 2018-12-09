@@ -104,7 +104,7 @@ void VulkanApp::mouseMoveCallback(GLFWwindow* window, double xPosition, double y
 
 void VulkanApp::keyDownCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
     float timeGap = GET_CLOBAL_TIME_GAP_SINCE_LAST_RECORD();
-    float movementSpeed = 0.05f;
+    float movementSpeed = 0.01f;
     if (key == GLFW_KEY_W && (action == GLFW_KEY_LAST || GLFW_PRESS)) {
         // go forward
         firstPersonCam->TranslateAlongLook(timeGap * movementSpeed);
@@ -181,24 +181,23 @@ void VulkanApp::initVulkan() {
     // begin offscreen ==========================================
     // scene objects need offscreen's ubo, so has to be before object
 
-	//prepareSkybox();
- //   prepareSceneObjectsData();
+	prepareSkybox();
+    prepareSceneObjectsData();
 
-	//// in this prepare offscreen function,
-	//// we prepare the renderpass and framebuffer 
-	//// which will be used to create skybox pipeline
- //   prepareOffscreen();
+	// in this prepare offscreen function,
+	// we prepare the renderpass and framebuffer 
+	// which will be used to create skybox pipeline
+    prepareOffscreen();
 
-	//// because create pipeline need renderpass which now is offscreen.renderpass
-	//createSkyboxPipeline();
+	// because create pipeline need renderpass which now is offscreen.renderpass
+	createSkyboxPipeline();
 
- //   prepareSceneObjectsDescriptor();
- //   prepareOffscreenCommandBuffer();
- //   prepareDeferred();
-
+    prepareSceneObjectsDescriptor();
+    prepareOffscreenCommandBuffer();
+    prepareDeferred();
 
 	// ray tracing pipeline
-	rt_createSema();
+	/*rt_createSema();
 	rt_createUniformBuffers();
 	rt_prepareStorageBuffers();
 	rt_prepareTextureTarget(rt_result, VK_FORMAT_R8G8B8A8_UNORM);
@@ -210,17 +209,17 @@ void VulkanApp::initVulkan() {
 	rt_createPipeline();
 	rt_prepareCompute();
 	rt_createComputeCommandBuffer();
-	rt_createRaytraceDisplayCommandBuffer();
+	rt_createRaytraceDisplayCommandBuffer();*/
 }
 
 void VulkanApp::mainLoop() {
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
-        rt_draw();
-		rt_updateUniformBuffer();
+       /* rt_draw();
+		rt_updateUniformBuffer();*/
 
-        //draw_new();
-        //updateUniformBuffers();
+        draw_new();
+        updateUniformBuffers();
     }
 
     vkDeviceWaitIdle(device_);
@@ -2720,18 +2719,18 @@ void VulkanApp::createOffscreenRenderPass() {
 // scene objects =================================================
 void VulkanApp::prepareSceneObjectsData() {
     AppSceneObject rock{};
-    rock.meshPath = "../../models/rock.obj";
-    rock.albedo.path = "../../textures/rock_low_Base_Color.png";
-    rock.normal.path = "../../textures/rock_low_Normal_DirectX.png";
-    rock.mrao.path = "../../textures/rock_low_Normal_DirectX.png";
+    rock.meshPath = "../../models/substance_sphere.obj";
+    rock.albedo.path = "../../textures/substance_sphere/Sphere_baseColor.png";
+    rock.normal.path = "../../textures/substance_sphere/Sphere_normal.png";
+    rock.mrao.path =
+        "../../textures/substance_sphere/Sphere_occlusionRoughnessMetallic.png";
     
-
     AppSceneObject cube2{};
-    cube2.meshPath = "../../models/sphere.obj";
-    cube2.albedo.path = "../../textures/uv_debug.png";
-    cube2.normal.path = "../../textures/normal_flat.png";
-    cube2.mrao.path = "../../textures/rock_low_Normal_DirectX.png";
-
+    cube2.meshPath = "../../models/substance_sphere.obj";
+    cube2.albedo.path = "../../textures/substance_sphere/Sphere_baseColor.png";
+    cube2.normal.path = "../../textures/substance_sphere/Sphere_normal.png";
+    cube2.mrao.path =
+        "../../textures/substance_sphere/Sphere_occlusionRoughnessMetallic.png";
 
     scene_objects_.push_back(cube2);
     scene_objects_.push_back(rock);
@@ -3974,7 +3973,7 @@ void VulkanApp::createDeferredPipeline() {
         "../../shaders/deferred.vert.spv",
         VK_SHADER_STAGE_VERTEX_BIT);
     shaderStages[1] = loadShader(
-        "../../shaders/deferred.frag.spv",
+        "../../shaders/deferred_pbr.frag.spv",
         VK_SHADER_STAGE_FRAGMENT_BIT);
 
     VkGraphicsPipelineCreateInfo pipelineCreateInfo{};
@@ -4130,6 +4129,8 @@ void VulkanApp::draw_new() {
 }
 
 void VulkanApp::updateUniformBuffers() {
+    float time = GET_CLOBAL_TIME_GAP_SINCE_START();
+
     // offscreen camera
     auto& ocs_ubo = offscreen_.uniformBufferAndContent.content;
 
@@ -4142,10 +4143,8 @@ void VulkanApp::updateUniformBuffers() {
 
     // scene object positions
     glm::mat4 modelMat;
-    float time = GET_CLOBAL_TIME_GAP_SINCE_START();
-
-    modelMat = glm::rotate(glm::mat4(1.0f),
-        time * glm::radians(90.0f), glm::vec3(10.0f, 10.0f, 10.0f));
+    
+    modelMat = modelMat = glm::translate(glm::vec3(0.f, 2.f, 0.f));
     auto& model0_ubo = scene_objects_[0].uniformBufferAndContent;
     model0_ubo.content.modelMatrix = modelMat;
     uniformBufferCpy(
@@ -4153,7 +4152,7 @@ void VulkanApp::updateUniformBuffers() {
         &model0_ubo.content, sizeof(model0_ubo.content));
 
     modelMat = glm::scale(glm::vec3(2.f, 2.f, 2.f));
-    modelMat = glm::translate(glm::vec3(10.f, 10.f, 10.f));
+    modelMat = glm::translate(glm::vec3(0.f, -2.f, 0.f));
     auto& model1_ubo = scene_objects_[1].uniformBufferAndContent;
     model1_ubo.content.modelMatrix = modelMat;
     uniformBufferCpy(
@@ -4174,6 +4173,14 @@ void VulkanApp::updateUniformBuffers() {
     // deferred
     auto& deferred_ubo = deferred_.uniformBufferAndContent;
     deferred_ubo.content.eyePos = firstPersonCam->GetPos();
+    deferred_ubo.content.modelView =
+        model0_ubo.content.modelMatrix * firstPersonCam->GetView();
+    glm::vec3 lightDir;
+    lightDir.x = cos(time * 1.f);
+    lightDir.y = sin(time * 1.f);
+    lightDir.z = cos(-time * 1.f);
+    deferred_ubo.content.lightPos = lightDir;
+    apputil::printVec3(lightDir);
 
     uniformBufferCpy(
         deferred_ubo.uniformBuffer.deviceMemory,

@@ -1,4 +1,5 @@
 #include "app_util.h"
+#include <iostream>
 
 namespace apputil {
     VkDescriptorSetLayoutBinding createDescriptorSetLayoutBinding(
@@ -88,5 +89,9 @@ namespace apputil {
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         beginInfo.flags = flags;
         return beginInfo;
+    }
+
+    void printVec3(const glm::vec3& vector) {
+        std::cout << vector.x << " " << vector.y << " " << vector.z << std::endl;
     }
 }

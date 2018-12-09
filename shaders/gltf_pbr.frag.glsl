@@ -19,21 +19,30 @@ precision highp float;
 uniform vec3 u_LightDirection;
 uniform vec3 u_LightColor;
 
-// IBL
+#ifdef USE_IBL
 uniform samplerCube u_DiffuseEnvSampler;
 uniform samplerCube u_SpecularEnvSampler;
 uniform sampler2D u_brdfLUT;
+#endif
 
-
+#ifdef HAS_BASECOLORMAP
 uniform sampler2D u_BaseColorSampler;
-
+#endif
+#ifdef HAS_NORMALMAP
 uniform sampler2D u_NormalSampler;
 uniform float u_NormalScale;
-
+#endif
+#ifdef HAS_EMISSIVEMAP
+uniform sampler2D u_EmissiveSampler;
+uniform vec3 u_EmissiveFactor;
+#endif
+#ifdef HAS_METALROUGHNESSMAP
 uniform sampler2D u_MetallicRoughnessSampler;
-
+#endif
+#ifdef HAS_OCCLUSIONMAP
 uniform sampler2D u_OcclusionSampler;
 uniform float u_OcclusionStrength;
+#endif
 
 uniform vec2 u_MetallicRoughnessValues;
 uniform vec4 u_BaseColorFactor;
@@ -142,7 +151,11 @@ vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection)
     vec3 brdf = SRGBtoLINEAR(texture2D(u_brdfLUT, vec2(pbrInputs.NdotV, 1.0 - pbrInputs.perceptualRoughness))).rgb;
     vec3 diffuseLight = SRGBtoLINEAR(textureCube(u_DiffuseEnvSampler, n)).rgb;
 
+#ifdef USE_TEX_LOD
+    vec3 specularLight = SRGBtoLINEAR(textureCubeLodEXT(u_SpecularEnvSampler, reflection, lod)).rgb;
+#else
     vec3 specularLight = SRGBtoLINEAR(textureCube(u_SpecularEnvSampler, reflection)).rgb;
+#endif
 
     vec3 diffuse = diffuseLight * pbrInputs.diffuseColor;
     vec3 specular = specularLight * (pbrInputs.specularColor * brdf.x + brdf.y);
@@ -276,6 +289,8 @@ void main()
 
     // Calculate lighting contribution from image based lighting source (IBL)
 #ifdef USE_IBL
+    // HERE 0
+
     color += getIBLContribution(pbrInputs, n, reflection);
 #endif
 
@@ -283,6 +298,11 @@ void main()
 #ifdef HAS_OCCLUSIONMAP
     float ao = texture2D(u_OcclusionSampler, v_UV).r;
     color = mix(color, color * ao, u_OcclusionStrength);
+#endif
+
+#ifdef HAS_EMISSIVEMAP
+    vec3 emissive = SRGBtoLINEAR(texture2D(u_EmissiveSampler, v_UV)).rgb * u_EmissiveFactor;
+    color += emissive;
 #endif
 
     // This section uses mix to override final color for reference app visualization
