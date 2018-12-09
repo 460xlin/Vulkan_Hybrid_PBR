@@ -347,11 +347,9 @@ private:
 
     // skybox =================================================
     AppSkyboxPipelineAssets skybox_;
-
     VkPhysicalDeviceFeatures device_features_;
     VkPhysicalDeviceFeatures enabled_device_features_{};
     VkPhysicalDeviceMemoryProperties device_memory_properties_;
-
     void prepareSkybox();
     void prepareSkyboxTexture();
     void loadSkyboxMesh();
@@ -388,6 +386,7 @@ private:
     void prepareDeferred();
     void prepareQuadVertexAndIndexBuffer();
     void createDeferredUniformBuffer();
+    void createDeferredPBRTextures();
     void createDeferredDescriptorSetLayout();
     void createDeferredDescriptorSet();
     void createDeferredPipelineLayout();

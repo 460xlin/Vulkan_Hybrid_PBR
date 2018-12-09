@@ -123,11 +123,11 @@ void VulkanApp::keyDownCallback(GLFWwindow* window, int key, int scancode, int a
     }
     else if (key == GLFW_KEY_Q && (action == GLFW_KEY_LAST || GLFW_PRESS)) {
         // go up
-        firstPersonCam->TranslateAlongUp(+timeGap * movementSpeed);
+        firstPersonCam->TranslateAlongUp(-timeGap * movementSpeed);
     }
     else if (key == GLFW_KEY_E && (action == GLFW_KEY_LAST || GLFW_PRESS)) {
         // go down
-        firstPersonCam->TranslateAlongUp(timeGap * movementSpeed);
+        firstPersonCam->TranslateAlongUp(+timeGap * movementSpeed);
     }
 }
 
@@ -180,7 +180,7 @@ void VulkanApp::initVulkan() {
     setupVertexDescriptions();
     // begin offscreen
     // scene objects need offscreen's ubo, so has to be before object
-
+    // skybox
 	prepareSkybox();
     prepareSceneObjectsData();
 
@@ -194,10 +194,9 @@ void VulkanApp::initVulkan() {
 
     prepareSceneObjectsDescriptor();
     prepareOffscreenCommandBuffer();
-    // skybox
-
+    
+    // deferred
     prepareDeferred();
-
 }
 
 void VulkanApp::mainLoop() {
@@ -2464,16 +2463,14 @@ void VulkanApp::prepareSceneObjectsData() {
     
 
     AppSceneObject cube2{};
-    cube2.meshPath = "../../models/cube.obj";
+    cube2.meshPath = "../../models/sphere.obj";
     cube2.albedo.path = "../../textures/uv_debug.png";
-    cube2.normal.path = "../../textures/normal_map_debug.png";
+    cube2.normal.path = "../../textures/normal_flat.png";
     cube2.mrao.path = "../../textures/rock_low_Normal_DirectX.png";
 
 
     scene_objects_.push_back(cube2);
     scene_objects_.push_back(rock);
-
-
 
     // the following 2 functions must be called before scene object loading
     // scene object descriptor set requires offscreen uniform buffer and
@@ -3384,6 +3381,7 @@ void VulkanApp::skybox_transitionLayout(VkCommandBuffer cmdbuffer,
 void VulkanApp::prepareDeferred() {
     prepareQuadVertexAndIndexBuffer();
     createDeferredUniformBuffer();
+    createDeferredPBRTextures();
     createDeferredDescriptorSetLayout();
     createDeferredDescriptorSet();
     createDeferredPipelineLayout();
@@ -3410,6 +3408,12 @@ void VulkanApp::createDeferredUniformBuffer() {
         deferred_.uniformBufferAndContent.uniformBuffer.buffer;
     buffer_info.offset = 0;
     buffer_info.range = VK_WHOLE_SIZE;
+}
+
+void VulkanApp::createDeferredPBRTextures() {
+    deferred_.pbrTextures.brdfLUT.path = "../../textures/brdfLUT.png";
+    loadSingleSceneObjectTexture(deferred_.pbrTextures.brdfLUT);
+    int a = 0;
 }
 
 void VulkanApp::createDeferredDescriptorSetLayout() {
@@ -3450,7 +3454,13 @@ void VulkanApp::createDeferredDescriptorSetLayout() {
 			5,
 			VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 			1,
-			VK_SHADER_STAGE_FRAGMENT_BIT)
+			VK_SHADER_STAGE_FRAGMENT_BIT),
+        // binding 6: brdfLUT texture
+        apputil::createDescriptorSetLayoutBinding(
+            6,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            1,
+            VK_SHADER_STAGE_FRAGMENT_BIT)
     };
 
     VkDescriptorSetLayoutCreateInfo layoutInfo = {};
@@ -3514,6 +3524,20 @@ void VulkanApp::createDeferredDescriptorSet() {
             VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
             4,
             &offscreen_.frameBufferAssets.mrao.descriptorImageInfo,
+            1),
+        // binding 5: cube map
+        apputil::createImageWriteDescriptorSet(
+            deferred_.descriptorSet,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            5,
+            &skybox_.skyBoxCube.cubemap.textureInfo.texture.descriptorImageInfo,
+            1),
+        // binding 6: brdfLUT
+        apputil::createImageWriteDescriptorSet(
+            deferred_.descriptorSet,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            6,
+            &deferred_.pbrTextures.brdfLUT.texture.descriptorImageInfo,
             1)
     };
 
@@ -3871,8 +3895,6 @@ void VulkanApp::updateUniformBuffers() {
     uniformBufferCpy(
         model1_ubo.uniformBuffer.deviceMemory,
         &model1_ubo.content, sizeof(model1_ubo.content));
-
-
     
     // skybox
     auto& skybox_ubo = skybox_.uniformBufferAndContent;
@@ -3884,6 +3906,14 @@ void VulkanApp::updateUniformBuffers() {
     uniformBufferCpy(
         skybox_ubo.uniformBuffer.deviceMemory,
         &skybox_ubo.content, sizeof(skybox_ubo.content));
+
+    // deferred
+    auto& deferred_ubo = deferred_.uniformBufferAndContent;
+    deferred_ubo.content.eyePos = firstPersonCam->GetPos();
+
+    uniformBufferCpy(
+        deferred_ubo.uniformBuffer.deviceMemory,
+        &deferred_ubo.content, sizeof(deferred_ubo.content));
 }
 
 // helper
