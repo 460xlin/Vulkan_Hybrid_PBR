@@ -31,6 +31,7 @@ void main()
 	vec3 tnorm = TBN * normalize(texture(samplerNormalMap, inUV).xyz * 2.0 - vec3(1.0));
 	outNormal = vec4(normalize(tnorm), 1.0);
 	// outNormal = vec4(normalize(N), 1.0);
+	outNormal.y = -outNormal.y;
 
 	outAlbedo = texture(samplerColor, inUV);
 	outMrao = texture(samplerMrao, inUV);

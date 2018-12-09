@@ -23,21 +23,35 @@ layout (location = 0) in vec2 inUV;
 // out
 layout (location = 0) out vec4 outFragColor;
 
+vec3 myReflect(vec3 I, vec3 N) {
+	return I - 2.0 * dot(N, I) * N;
+}
+
 void main() 
 {
+	
+	vec4 fragPosV4 = texture(samplerPosition, inUV);
+	vec3 fragColor = texture(samplerAlbedo, inUV).rgb;
+	if (fragPosV4.w < 1.0f) {
+		outFragColor = vec4(fragColor, 1.0f);
+		return;
+	}
 	vec3 fragPos = texture(samplerPosition, inUV).xyz;
 	vec3 normal = texture(samplerNormal, inUV).xyz;
+
 	vec3 eye2Frag = fragPos - ubo.eyePos;
 	vec3 sampDir = reflect(normalize(eye2Frag), normal);
-	vec3 fragColor = texture(samplerCubemap, sampDir).rgb;
 
 	// -------------------------------
-	vec3 v = normalize(ubo.eyePos - fragPos);
-	vec3 reflection = -normalize(reflect(v, normal));
+	vec3 v = normalize(fragPos - ubo.eyePos);
+	vec3 reflection = normalize(reflect(v, normal));
+	fragColor = texture(samplerCubemap, normal).rgb;
+	// fragColor = texture(samplerAlbedo, inUV).rgb;
 	fragColor = texture(samplerCubemap, reflection).rgb;
-	fragColor = texture(samplerAlbedo, inUV).rgb;
-	fragColor = normal;
+
 	// fragColor = normal;
 	// fragColor = fragPos;
+	outFragColor = vec4(reflection, 1.f);
 	outFragColor = vec4(fragColor, 1.f);
+	// TODO normlize
 }
