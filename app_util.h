@@ -56,6 +56,7 @@ struct AppSceneObject {
 };
 
 struct AppDeferredUniformBufferContent {
+    glm::vec3 eyePos;
     glm::vec3 lightPos;
 };
 
@@ -65,6 +66,9 @@ struct AppDeferredPipelineAssets {
     VkRenderPass renderPass;
     VkDescriptorSetLayout descriptorSetLayout;
     VkDescriptorSet descriptorSet;
+    struct {
+        AppTextureInfo brdfLUT;
+    } pbrTextures;
     struct {
         AppUniformBuffer uniformBuffer;
         AppDeferredUniformBufferContent content;
@@ -163,8 +167,6 @@ namespace apputil {
         uint32_t descriptorCount);
 
     VkCommandBufferBeginInfo cmdBufferBegin(VkCommandBufferUsageFlags flags);
-
-    glm::vec3 getRoationRadianFromForward(const glm::vec3& forward);
 }
 
 
