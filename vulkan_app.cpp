@@ -5538,22 +5538,11 @@ void VulkanApp::updateUniformBuffers() {
         &model1_ubo.content, sizeof(model1_ubo.content));
 
 
-    // skybox cam
-    modelMat = glm::mat4(1.0f);
-    glm::vec3 rotation =
-        getSkyboxCubeRoationRadianFromForward(firstPersonCam->GetForward());
-        //glm::vec3(1.f);
-
-    modelMat = glm::rotate(modelMat, glm::radians(rotation.x),
-        glm::vec3(1.0f, 0.0f, 0.0f));
-    modelMat = glm::rotate(modelMat, glm::radians(rotation.y),
-        glm::vec3(0.0f, 1.0f, 0.0f));
-    modelMat = glm::rotate(modelMat, glm::radians(rotation.z),
-        glm::vec3(0.0f, 0.0f, 1.0f));
-
+    
+    // skybox
     auto& skybox_ubo = skybox_.uniformBufferAndContent;
 
-    skybox_ubo.content.modelMatrix = modelMat;
+    skybox_ubo.content.modelMatrix = getSkyboxModelMat();
     skybox_ubo.content.projMatrix = firstPersonCam->GetProj();
     skybox_ubo.content.viewMatrix = firstPersonCam->GetView();
 
@@ -5571,21 +5560,22 @@ void VulkanApp::uniformBufferCpy(VkDeviceMemory& device_memory, void* ubo_ptr,
     vkUnmapMemory(device_, device_memory);
 }
 
-glm::vec3 VulkanApp::getSkyboxCubeRoationRadianFromForward(const glm::vec3& forward) {
-    static glm::vec3 front(0.1f, 0.f, 0.f);
-    static glm::vec3 up(0.f, 1.f, 0.f);
-    static glm::vec3 right(0.f, 0.f, 1.f);
-    static glm::vec3 forwardN = glm::normalize(forward);
-    static glm::vec3 output;
-
-    output.x = glm::acos(glm::dot(forwardN, up)) * glm::pi<float>() * 180.f;
-    output.y = glm::acos(glm::dot(forwardN, front)) * glm::pi<float>() * 180.f;
-    output.z = glm::acos(glm::dot(forwardN, right)) * glm::pi<float>() * 180.f;
-    return output;
+glm::mat4 VulkanApp::getSkyboxModelMat() {
+    // skybox cam
+    glm::mat4 modelMat = glm::mat4(1.0f);
+    glm::vec3 forward = firstPersonCam->GetForward();
+    modelMat = glm::rotate(modelMat, -forward.y,
+        glm::vec3(1.0f, 0.0f, 0.0f));
+    
+    // TODO debug this 
+    // std::cout << forward.x << " " << forward.y << std::endl;
+    modelMat = glm::rotate(modelMat, forward.x,
+        glm::vec3(0.0f, 1.0f, 0.0f));
+    return modelMat;
 }
 
 
-// tryout2: combine skybox and offscrenn =================================================
+// tryout: combine skybox and offscrenn =================================================
 
 void VulkanApp::createOffscreenForSkyboxAndModel() {
 	if (offscreen_.commandBuffer == VK_NULL_HANDLE)
@@ -5630,7 +5620,6 @@ void VulkanApp::createOffscreenForSkyboxAndModel() {
 	scissor.offset.y = 0;
 	vkCmdSetScissor(offscreen_.commandBuffer, 0, 1, &scissor);
 
-
 	std::array<VkClearValue, 5> clearValues;
 	clearValues[0].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
 	clearValues[1].color = { { 0.0f, 0.0f, 0.0f, 0.0f } };
@@ -5649,8 +5638,6 @@ void VulkanApp::createOffscreenForSkyboxAndModel() {
 
 	vkCmdBeginRenderPass(offscreen_.commandBuffer, &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-
-
 	VkDeviceSize offsets[1] = { 0 };
 
 	vkCmdBindPipeline(
@@ -5660,9 +5647,6 @@ void VulkanApp::createOffscreenForSkyboxAndModel() {
 
 	// draw models
 	for (auto& scene_object : scene_objects_) {
-
-
-
 		vkCmdBindDescriptorSets(offscreen_.commandBuffer,
 			VK_PIPELINE_BIND_POINT_GRAPHICS, offscreen_.pipelineLayout, 0, 1,
 			&scene_object.descriptorSet, 0, NULL);
@@ -5679,9 +5663,7 @@ void VulkanApp::createOffscreenForSkyboxAndModel() {
 			1, 0, 0, 0);
 	}
 
-
-
-
+    // start draw sky box
 
 	// IMPT: 
 	// since the renderpass is only related to framebuffers and clearvalue

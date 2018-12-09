@@ -53,7 +53,7 @@ void Camera::RecomputeAttributes()
 
     float tan_fovy = tan(glm::radians(fovy / 2));
     float len = glm::length(ref - eye);
-    aspect = width / height;
+    aspect = (float)width / (float)height;
     V = up * len*tan_fovy;
     H = right * len*aspect*tan_fovy;
 }
@@ -61,7 +61,7 @@ void Camera::RecomputeAttributes()
 glm::mat4 Camera::GetViewProjMat()
 {
     return glm::perspective(glm::radians(fovy),
-        width / (float)height,
+        (float)width / (float)height,
         near_clip, far_clip) * glm::lookAt(eye, ref, up);
 }
 

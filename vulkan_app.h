@@ -466,7 +466,7 @@ private:
     void createOffscreenRenderPass();
     void createOffscreenFrameBuffer();
     void createOffscreenPipeline();
-    void createOffscreenCommandBuffer();
+    void createOffscreenCommandBuffer(); // this is not used
 
     // scene loading and prepare assets =================================================
     std::vector<AppSceneObject> scene_objects_;
@@ -535,9 +535,9 @@ private:
     // helper
     void uniformBufferCpy(VkDeviceMemory& device_memory, void* ubo_ptr,
         size_t size);
+    glm::mat4 getSkyboxModelMat();
 
-    glm::vec3 getSkyboxCubeRoationRadianFromForward(const glm::vec3& forward);
-
+    
 
 
 	// tryout =================================================
