@@ -245,12 +245,6 @@ private:
 
     VkPipelineCache pipelineCache;
 
-    // descriptor set
-    // union buffer
-    struct {
-        MyUniformBuffer rt_compute;
-    } uniformBuffers;
-
     VkPipelineShaderStageCreateInfo loadShader(std::string fileName, VkShaderStageFlagBits stage);
 
     std::vector<VkShaderModule> shaderModules;
@@ -262,26 +256,42 @@ private:
 
     VkResult queuePresent(VkQueue queue, uint32_t imageIndex, VkSemaphore waitSemaphore = VK_NULL_HANDLE);
 
-    // ray tracing
 
+
+    // ray tracing
+	void rt_createSema();
+	void rt_createUniformBuffers();
     void rt_prepareStorageBuffers();
+	void rt_prepareTextureTarget(MyTexture& tex, VkFormat format, uint32_t width = WIDTH, uint32_t height = HEIGHT);
+	void rt_graphics_setupDescriptorSetLayout();
+	void rt_graphics_setupDescriptorSet();
+	void rt_createPipelineLayout();
+	void rt_createRenderpass();
+	void rt_creatFramebuffer(); // use swap chains' framebuffers
+	void rt_createPipeline();
+	//void rt_setupDescriptorPool(); // all pipeline use the same pool
+	void rt_prepareCompute();
+	void rt_createComputeCommandBuffer();
+	void rt_createRaytraceDisplayCommandBuffer();
+	void rt_draw();
 
     Sphere newSphere(glm::vec3 pos, float radius, glm::vec3 diffuse, float specular);
-
     Plane newPlane(glm::vec3 normal, float distance, glm::vec3 diffuse, float specular);
+	void rt_updateUniformBuffer();
 
-    uint32_t rt_currentId = 0;
-    
-    void rt_prepareTextureTarget(MyTexture& tex, VkFormat format, uint32_t width = WIDTH, uint32_t height = HEIGHT);
-
-    void rt_graphics_setupDescriptorSetLayout();
-
-    void rt_createUniformBuffers();
-
-    MyTexture rt_result;
-
+	uint32_t rt_currentId = 0;
+	MyTexture rt_result;
+	RTUniformBufferObject rt_ubo;
+	std::vector<VkCommandBuffer> rt_drawCommandBuffer;
+	VkSemaphore rt_sema;
     // todo: ray tracing part share the same queue with whom???????
-    struct {
+    
+		// union buffer
+	struct {
+		MyUniformBuffer rt_compute;
+	} uniformBuffers;
+	
+	struct {
       //  VkDescriptorSet descriptorSetPreCompute;	// Raytraced image display shader bindings before compute shader image manipulation
       //  VkDescriptorSet descriptorSet;				// Raytraced image display shader bindings after compute shader image manipulation
         VkDescriptorSetLayout rt_descriptorSetLayout;
@@ -292,8 +302,6 @@ private:
     } graphics;
 
 
-    void rt_graphics_setupDescriptorSet();
-    void rt_prepareCompute();
     struct {
         struct rayTracingSceneObjectBuffer
         {
@@ -312,16 +320,10 @@ private:
 
     } compute;
 
-    void rt_createRaytraceDisplayCommandBuffer();
-    std::vector<VkCommandBuffer> rt_drawCommandBuffer;
 
-    void rt_draw();
 
-    void rt_createComputeCommandBuffer();
 
-    void rt_updateUniformBuffer();
 
-    RTUniformBufferObject rt_ubo;
 
     // offscreen =================================================
     AppOffscreenPipelineAssets offscreen_;
