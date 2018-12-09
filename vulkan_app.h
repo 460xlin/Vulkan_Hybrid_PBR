@@ -115,6 +115,8 @@ struct Plane {
     glm::ivec3 _pad;
 };
 
+
+
 class VulkanApp {
 public:
     VulkanApp();
@@ -257,11 +259,11 @@ private:
     VkResult queuePresent(VkQueue queue, uint32_t imageIndex, VkSemaphore waitSemaphore = VK_NULL_HANDLE);
 
 
-
-    // ray tracing
+	// ray tracing =================================================
 	void rt_createSema();
 	void rt_createUniformBuffers();
     void rt_prepareStorageBuffers();
+	void rt_prepareObjFileBuffer();
 	void rt_prepareTextureTarget(MyTexture& tex, VkFormat format, uint32_t width = WIDTH, uint32_t height = HEIGHT);
 	void rt_graphics_setupDescriptorSetLayout();
 	void rt_graphics_setupDescriptorSet();
@@ -278,12 +280,15 @@ private:
     Sphere newSphere(glm::vec3 pos, float radius, glm::vec3 diffuse, float specular);
     Plane newPlane(glm::vec3 normal, float distance, glm::vec3 diffuse, float specular);
 	void rt_updateUniformBuffer();
+	void rt_loadObj(RT_AppSceneObject& object_struct);
 
 	uint32_t rt_currentId = 0;
 	MyTexture rt_result;
 	RTUniformBufferObject rt_ubo;
 	std::vector<VkCommandBuffer> rt_drawCommandBuffer;
 	VkSemaphore rt_sema;
+
+
     // todo: ray tracing part share the same queue with whom???????
     
 		// union buffer
@@ -301,13 +306,14 @@ private:
         VkRenderPass rt_rayTraceRenderPass;
     } graphics;
 
-
     struct {
         struct rayTracingSceneObjectBuffer
         {
             VkBuffer buffer;
             VkDeviceMemory deviceMem;
         }myPlaneBuffer, mySphereBuffer;
+
+		RT_AppSceneObject rt_scene_obj;
 
         VkDescriptorSetLayout rt_computeDescriptorSetLayout;
         VkDescriptorSet rt_computeDescriptorSet;
@@ -319,11 +325,6 @@ private:
         VkCommandBuffer rt_computeCmdBuffer = VK_NULL_HANDLE;
 
     } compute;
-
-
-
-
-
 
     // offscreen =================================================
     AppOffscreenPipelineAssets offscreen_;

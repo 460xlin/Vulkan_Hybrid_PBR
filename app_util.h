@@ -34,6 +34,9 @@ struct AppSceneObjectUniformBufferConent {
     glm::mat4 modelMatrix;
 };
 
+
+
+
 struct AppSceneObject {
     
     std::string meshPath;
@@ -53,6 +56,20 @@ struct AppSceneObject {
         AppUniformBuffer uniformBuffer;
         AppSceneObjectUniformBufferConent content;
     } uniformBufferAndContent; 
+};
+
+struct RT_AppSceneObject {
+
+	std::string meshPath;
+	uint32_t vertexCount;
+	uint32_t indexCount;
+	uint32_t triangleCount;
+
+	VkBuffer buffer;
+	VkDeviceMemory deviceMem;
+	VkDescriptorBufferInfo buffInfo;
+
+	VkDescriptorSet descriptorSet;
 };
 
 struct AppDeferredUniformBufferContent {
@@ -170,3 +187,25 @@ namespace apputil {
 }
 
 
+struct Vertex {
+	float pos[3];
+	float uv[2];
+	float col[3];
+	float normal[3];
+	float tangent[3];
+};
+
+
+struct BoundingBox
+{
+	glm::vec3 maxB;
+	glm::vec3 minB;
+};
+
+struct Triangle
+{
+	int triidx;
+	Vertex Triverts[3];
+	glm::vec3 Trinormal;
+	BoundingBox bbx;
+};

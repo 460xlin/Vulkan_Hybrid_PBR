@@ -14,6 +14,98 @@
 #include <gli/gli.hpp>
 #include <glm/gtc/constants.hpp>
 
+
+// temp
+//#include <glm/gtx/intersect.hpp>
+//using namespace glm;
+//
+//void temp()
+//{
+//	glm::vec3 rayO;
+//	glm::vec3 rayD;
+//	glm::vec3 a;
+//	glm::vec3 b;
+//	glm::vec3 c;
+//	glm::vec2 bary;
+//	float distance;
+//
+//	glm::vec3 bary2;
+//
+//	bool result = glm::intersectRayTriangle(
+//			rayO, rayD,
+//			a, b, c,
+//			bary, distance);
+//}
+//bool intersectRayTriangle
+//(
+//
+//
+//	vec3 const& orig, vec3 const& dir,
+//	vec3 const& vert0, vec3 const& vert1, vec3 const& vert2,
+//	vec2& baryPosition, float& distance
+//)
+//{
+//	// find vectors for two edges sharing vert0
+//	vec3 const edge1 = vert1 - vert0;
+//	vec3 const edge2 = vert2 - vert0;
+//
+//	// begin calculating determinant - also used to calculate U parameter
+//	vec3 const p = cross(dir, edge2);
+//
+//	// if determinant is near zero, ray lies in plane of triangle
+//	float const det = dot(edge1, p);
+//
+//	vec3 qvec;
+//
+//	if (det > std::numeric_limits<float>::epsilon())
+//	{
+//		// calculate distance from vert0 to ray origin
+//		vec3 const tvec = orig - vert0;
+//
+//		// calculate U parameter and test bounds
+//		baryPosition.x = glm::dot(tvec, p);
+//		if (baryPosition.x < static_cast<float>(0) || baryPosition.x > det)
+//			return false;
+//
+//		// prepare to test V parameter
+//		qvec = cross(tvec, edge1);
+//
+//		// calculate V parameter and test bounds
+//		baryPosition.y = dot(dir, qvec);
+//		if ((baryPosition.y < static_cast<float>(0)) || ((baryPosition.x + baryPosition.y) > det))
+//			return false;
+//	}
+//	else if (det < -std::numeric_limits<float>::epsilon())
+//	{
+//		// calculate distance from vert0 to ray origin
+//		vec3 const tvec = orig - vert0;
+//
+//		// calculate U parameter and test bounds
+//		baryPosition.x = dot(tvec, p);
+//		if ((baryPosition.x > static_cast<float>(0)) || (baryPosition.x < det))
+//			return false;
+//
+//		// prepare to test V parameter
+//		qvec = cross(tvec, edge1);
+//
+//		// calculate V parameter and test bounds
+//		baryPosition.y = dot(dir, qvec);
+//		if ((baryPosition.y > static_cast<float>(0)) || (baryPosition.x + baryPosition.y < det))
+//			return false;
+//	}
+//	else
+//		return false; // ray is parallel to the plane of the triangle
+//
+//	float inv_det = static_cast<float>(1) / det;
+//
+//	// calculate distance, ray intersects triangle
+//	distance = dot(edge2, qvec) * inv_det;
+//	baryPosition *= inv_det;
+//
+//	return true;
+//}
+
+
 // Timers =================================================
 std::chrono::time_point<std::chrono::steady_clock> START_TIME;
 std::chrono::time_point<std::chrono::steady_clock> LAST_RECORD_TIME;
@@ -1496,9 +1588,13 @@ void VulkanApp::rt_prepareStorageBuffers() {
     memcpy(sphere_data, spheres.data(), (size_t)sphereStorageBufferSize);
     vkUnmapMemory(device_, sphereStagingBufferMemory);
 
-    createBuffer(sphereStorageBufferSize,
+    createBuffer(
+		sphereStorageBufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, compute.mySphereBuffer.buffer, compute.mySphereBuffer.deviceMem);
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		compute.mySphereBuffer.buffer,
+		compute.mySphereBuffer.deviceMem
+	);
     copyBuffer(sphereStagingBuffer, compute.mySphereBuffer.buffer, sphereStorageBufferSize);
 
     vkDestroyBuffer(device_, sphereStagingBuffer, nullptr);
@@ -1537,6 +1633,13 @@ void VulkanApp::rt_prepareStorageBuffers() {
     vkDestroyBuffer(device_, planeStagingBuffer, nullptr);
     vkFreeMemory(device_, planeStagingBufferMemory, nullptr);
 }
+
+void VulkanApp::rt_prepareObjFileBuffer()
+{
+	compute.rt_scene_obj.meshPath = "../../models/cube.obj";
+}
+
+
 void VulkanApp::rt_prepareTextureTarget(MyTexture& tex, VkFormat format, uint32_t width, uint32_t height)
 {
 	// Get device properties for the requested texture format
@@ -2284,7 +2387,140 @@ void VulkanApp::rt_updateUniformBuffer() {
 }
 
 
+void VulkanApp::rt_loadObj(RT_AppSceneObject& object_struct) {
+	struct Vertex {
+		float pos[3];
+		float uv[2];
+		float col[3];
+		float normal[3];
+		float tangent[3];
+	};
 
+	std::string file_path = object_struct.meshPath;
+
+	std::vector<Vertex> vertices;
+	std::vector<uint32_t> indices;
+
+	tinyobj::attrib_t attrib;
+	std::vector<tinyobj::shape_t> shapes;
+	std::vector<tinyobj::material_t> materials;
+	std::string warn, err;
+
+
+
+	if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, file_path.c_str())) {
+		throw std::runtime_error(warn + err);
+	}
+
+	int colorRounding = 1333;
+	for (const auto& shape : shapes) {
+		// +3 for per triangle
+		for (int i = 0; i < shape.mesh.indices.size(); i += 3) {
+			colorRounding += 1333333;
+			Vertex verts[3];
+			const tinyobj::index_t idx[] = {
+				shape.mesh.indices[i],
+				shape.mesh.indices[i + 1],
+				shape.mesh.indices[i + 2] };
+
+			float colorVul[3];
+			colorVul[0] = (float)(colorRounding % 255) / (float)255;
+			colorRounding += 345256;
+			colorVul[1] = 0.f;
+			colorVul[2] = (float)(colorRounding % 255) / (float)255;
+
+			for (int j = 0; j < 3; ++j) {
+				const auto& index = idx[j];
+				auto& vert = verts[j];
+				vert.pos[0] = attrib.vertices[3 * index.vertex_index + 2];
+				vert.pos[1] = attrib.vertices[3 * index.vertex_index + 1];
+				vert.pos[2] = attrib.vertices[3 * index.vertex_index + 0];
+
+				vert.uv[0] = 1.0f - attrib.texcoords[2 * index.texcoord_index + 0];
+				vert.uv[1] = 1.0f - attrib.texcoords[2 * index.texcoord_index + 1];
+
+				vert.col[0] = colorVul[0];
+				vert.col[1] = colorVul[1];
+				vert.col[2] = colorVul[2];
+
+				vert.normal[0] = attrib.normals[3 * index.normal_index + 2];
+				vert.normal[1] = attrib.normals[3 * index.normal_index + 1];
+				vert.normal[2] = attrib.normals[3 * index.normal_index + 0];
+			}
+
+			// clac tangent
+			// Edges of the triangle : position delta
+			glm::vec3 deltaPos1 = glm::vec3(
+				verts[1].pos[0] - verts[0].pos[0],
+				verts[1].pos[1] - verts[0].pos[1],
+				verts[1].pos[2] - verts[0].pos[2]);
+			glm::vec3 deltaPos2 = glm::vec3(
+				verts[2].pos[0] - verts[0].pos[0],
+				verts[2].pos[1] - verts[0].pos[1],
+				verts[2].pos[2] - verts[0].pos[2]);
+
+			// UV delta
+			glm::vec2 deltaUV1 = glm::vec2(
+				verts[1].uv[0] - verts[0].uv[0],
+				verts[1].uv[1] - verts[0].uv[1]
+			);
+			glm::vec2 deltaUV2 = glm::vec2(
+				verts[2].uv[0] - verts[0].uv[0],
+				verts[2].uv[1] - verts[0].uv[1]
+			);
+
+			float r = 1.0f / (deltaUV1.x*deltaUV2.y - deltaUV1.y*deltaUV2.x);
+			glm::vec3 tangent = r
+				* (deltaPos1 * deltaUV2.y - deltaPos2 * deltaUV1.y);
+
+			// write tangent
+			for (int j = 0; j < 3; ++j) {
+				verts[j].tangent[0] = tangent.x;
+				verts[j].tangent[1] = tangent.y;
+				verts[j].tangent[2] = tangent.z;
+			}
+
+			// push_back
+			for (int j = 0; j < 3; ++j) {
+				vertices.push_back(verts[j]);
+				indices.push_back(indices.size());
+			}
+		}
+	}
+
+	object_struct.vertexCount = static_cast<uint32_t>(vertices.size());
+	object_struct.indexCount = static_cast<uint32_t>(indices.size());
+	object_struct.triangleCount = object_struct.vertexCount / 3;
+
+	// create vertex buffer for arbitary  model
+	VkDeviceSize vertexBufferSize = sizeof(Vertex) * vertices.size();
+
+	VkBuffer StagingBuffer;
+	VkDeviceMemory StagingBufferMemory;
+	createBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		StagingBuffer, StagingBufferMemory);
+
+	void* data;
+	vkMapMemory(device_, StagingBufferMemory, 0, vertexBufferSize, 0,
+		&data);
+	memcpy(data, vertices.data(), (size_t)vertexBufferSize);
+	vkUnmapMemory(device_, StagingBufferMemory);
+
+	createBuffer(
+		vertexBufferSize,
+		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+		object_struct.buffer,
+		object_struct.deviceMem
+	);
+
+	copyBuffer(StagingBuffer, object_struct.buffer,
+		vertexBufferSize);
+
+	vkDestroyBuffer(device_, StagingBuffer, nullptr);
+	vkFreeMemory(device_, StagingBufferMemory, nullptr);	
+}
 
 // ray tracing end  =================================================
 
