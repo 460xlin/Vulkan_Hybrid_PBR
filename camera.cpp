@@ -131,7 +131,7 @@ void Camera::TranslateAlongRight(float amt)
 }
 void Camera::TranslateAlongUp(float amt)
 {
-    glm::vec3 translation = up * amt;
+    glm::vec3 translation = world_up * amt;
     eye += translation;
     ref += translation;
 }
