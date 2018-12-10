@@ -2355,7 +2355,7 @@ void VulkanApp::rt_updateUniformBuffer() {
 
 void VulkanApp::rt_loadObj() {
 
-    std::string file_path = "../../models/substance_sphere.obj";
+    std::string file_path = "../../models/maya_cube.obj";
 
 	std::vector<Triangle> triangles;
 	std::vector<Vertex> vertices;
