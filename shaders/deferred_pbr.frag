@@ -11,7 +11,7 @@ layout (binding = 0) uniform UBO
 } ubo;
 
 vec3 u_LightColor = vec3(1.f, 1.f, 1.f);
-vec3 u_ScaleIBLAmbient = vec3(4.f);
+vec3 u_ScaleIBLAmbient = vec3(1.5f);
 float u_Exposure = 4.50;
 float u_Gamma = 2.20;
 
@@ -99,11 +99,11 @@ vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection)
     // retrieve a scale and bias to F0. See [1], Figure 3
     vec3 brdf = SRGBtoLINEAR(texture(samplerBrdfLUT, vec2(pbrInputs.NdotV, 1.0 - pbrInputs.perceptualRoughness))).rgb;
 
-    // vec3 diffuseLight = SRGBtoLINEAR(texture(samplerCubemap, n)).rgb;
-    // vec3 specularLight = SRGBtoLINEAR(texture(samplerCubemap, reflection)).rgb;
+    // vec3 diffuseLight = SRGBtoLINEAR(texture(samplerCubemap, -n)).rgb;
+    // vec3 specularLight = SRGBtoLINEAR(texture(samplerCubemap, -reflection)).rgb;
 
-	vec3 diffuseLight = CubeMapToneAndGamma(texture(samplerCubemap, n).rgb);
-    vec3 specularLight = CubeMapToneAndGamma(texture(samplerCubemap, reflection).rgb);
+	vec3 diffuseLight = CubeMapToneAndGamma(texture(samplerCubemap, -n, 7).rgb);
+    vec3 specularLight = CubeMapToneAndGamma(texture(samplerCubemap, -reflection).rgb);
 
     vec3 diffuse = diffuseLight * pbrInputs.diffuseColor;
     vec3 specular = specularLight * (pbrInputs.specularColor * brdf.x + brdf.y);
@@ -112,6 +112,7 @@ vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection)
     diffuse *= u_ScaleIBLAmbient.x;
     specular *= u_ScaleIBLAmbient.y;
 
+    // return specular;
     return diffuse + specular;
 }
 
@@ -163,8 +164,7 @@ void main() {
 		return;
 	}
 	vec3 fragPos = vec3(fragPosV4.x, fragPosV4.y, fragPosV4.z);
-	// the real texture is actually ao-m-r
-	vec3 mrao = texture(samplerMrao, inUV).zxy;
+	vec3 mrao = texture(samplerMrao, inUV).xyz;
     float metallic = mrao.x;
 	float perceptualRoughness = mrao.y;
 
@@ -181,8 +181,6 @@ void main() {
     vec3 diffuseColor = baseColor.rgb * (vec3(1.0) - f0);
     diffuseColor *= 1.0 - metallic;
     vec3 specularColor = mix(f0, baseColor.rgb, metallic);
-
-	
 
 	float reflectance = max(max(specularColor.r, specularColor.g), specularColor.b);
 
@@ -222,7 +220,6 @@ void main() {
         specularColor
     );
 
-
 	// Calculate the shading terms for the microfacet specular shading model
     vec3 F = specularReflection(pbrInputs);
     float G = geometricOcclusion(pbrInputs);
@@ -250,7 +247,7 @@ void main() {
     // color = mix(color, specContrib, u_ScaleFGDSpec.w);
 
     // color = mix(color, diffuseContrib, u_ScaleDiffBaseMR.x);
-    // color = mix(color, baseColor.rgb, u_ScaleDiffBaseMR.y);
+    color = mix(color, baseColor.rgb, 0.3f);
     // color = mix(color, vec3(metallic), u_ScaleDiffBaseMR.z);
     // color = mix(color, vec3(perceptualRoughness), u_ScaleDiffBaseMR.w);
 	outFragColor = vec4(color, 1.f);
@@ -258,6 +255,5 @@ void main() {
 
 
 	// outFragColor = texture(samplerAlbedo, inUV);
-	outFragColor = vec4(IBLContribution, 1.f);
-
+	// outFragColor = vec4(IBLContribution, 1.f);
 }

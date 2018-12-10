@@ -47,7 +47,7 @@ void main()
 	vec3 reflection = normalize(reflect(v, normal));
 	fragColor = texture(samplerCubemap, normal).rgb;
 	// fragColor = texture(samplerAlbedo, inUV).rgb;
-	fragColor = texture(samplerCubemap, reflection).rgb;
+	fragColor = texture(samplerCubemap, -reflection).rgb;
 
 	// fragColor = normal;
 	// fragColor = fragPos;

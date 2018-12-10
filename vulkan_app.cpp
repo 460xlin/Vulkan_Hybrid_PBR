@@ -95,7 +95,7 @@ void VulkanApp::mouseMoveCallback(GLFWwindow* window, double xPosition, double y
         float deltaY = static_cast<float>((previousY - yPosition) * rotateSpeed);
 
         firstPersonCam->RotateAboutUp(deltaX);
-        firstPersonCam->RotateAboutRight(-deltaY);
+        firstPersonCam->RotateAboutRight(deltaY);
 
         previousX = xPosition;
         previousY = yPosition;
@@ -122,12 +122,12 @@ void VulkanApp::keyDownCallback(GLFWwindow* window, int key, int scancode, int a
         firstPersonCam->TranslateAlongRight(timeGap * movementSpeed);
     }
     else if (key == GLFW_KEY_Q && (action == GLFW_KEY_LAST || GLFW_PRESS)) {
-        // go up
+        // go down
         firstPersonCam->TranslateAlongUp(-timeGap * movementSpeed);
     }
     else if (key == GLFW_KEY_E && (action == GLFW_KEY_LAST || GLFW_PRESS)) {
-        // go down
-        firstPersonCam->TranslateAlongUp(+timeGap * movementSpeed);
+        // go up
+        firstPersonCam->TranslateAlongUp(timeGap * movementSpeed);
     }
 }
 
@@ -2718,22 +2718,33 @@ void VulkanApp::createOffscreenRenderPass() {
 
 // scene objects =================================================
 void VulkanApp::prepareSceneObjectsData() {
-    AppSceneObject rock{};
-    rock.meshPath = "../../models/substance_sphere.obj";
-    rock.albedo.path = "../../textures/substance_sphere/Sphere_baseColor.png";
-    rock.normal.path = "../../textures/substance_sphere/Sphere_normal.png";
-    rock.mrao.path =
-        "../../textures/substance_sphere/Sphere_occlusionRoughnessMetallic.png";
+    AppSceneObject sphere1{};
+    sphere1.meshPath = "../../models/substance_sphere.obj";
+    sphere1.albedo.path = "../../textures/substance_bronze/albedo.png";
+    sphere1.normal.path = "../../textures/substance_bronze/normal.png";
+    sphere1.mrao.path =
+        "../../textures/substance_bronze/mrao.png";
     
-    AppSceneObject cube2{};
-    cube2.meshPath = "../../models/substance_sphere.obj";
-    cube2.albedo.path = "../../textures/substance_sphere/Sphere_baseColor.png";
-    cube2.normal.path = "../../textures/substance_sphere/Sphere_normal.png";
-    cube2.mrao.path =
-        "../../textures/substance_sphere/Sphere_occlusionRoughnessMetallic.png";
+    AppSceneObject sphere2{};
+    sphere2.meshPath = "../../models/substance_sphere.obj";
+    sphere2.albedo.path =
+        "../../textures/substance_machinery/albedo.png";
+    sphere2.normal.path = "../../textures/substance_machinery/normal.png";
+    sphere2.mrao.path =
+        "../../textures/substance_machinery/mrao.png";
 
-    scene_objects_.push_back(cube2);
-    scene_objects_.push_back(rock);
+    AppSceneObject sphere3{};
+    sphere3.meshPath = "../../models/substance_sphere.obj";
+    sphere3.albedo.path =
+        "../../textures/substance_steal/albedo.png";
+    sphere3.normal.path = "../../textures/substance_steal/normal.png";
+    sphere3.mrao.path =
+        "../../textures/substance_steal/mrao.png";
+
+    scene_objects_.push_back(sphere1);
+    scene_objects_.push_back(sphere2);
+    scene_objects_.push_back(sphere3);
+
 
     // the following 2 functions must be called before scene object loading
     // scene object descriptor set requires offscreen uniform buffer and
@@ -2958,22 +2969,25 @@ void VulkanApp::prepareSkyboxTexture()
     VkFormat format;
 
     std::string filename;
-    if (device_features_.textureCompressionBC) {
-        filename = "../../textures/cubemap_yokohama_bc3_unorm.ktx";
-        format = VK_FORMAT_BC2_UNORM_BLOCK;
-    }
-    else if (device_features_.textureCompressionASTC_LDR) {
-        filename = "../../textures/cubemap_yokohama_astc_8x8_unorm.ktx";
-        format = VK_FORMAT_ASTC_8x8_UNORM_BLOCK;
-    }
-    else if (device_features_.textureCompressionETC2) {
-        filename = "../../textures/cubemap_yokohama_etc2_unorm.ktx";
-        format = VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK;
-    }
-    else {
-        throw std::runtime_error("failed to find suitable format for cubemap");
-    }
-    
+    //if (device_features_.textureCompressionBC) {
+    //    filename = "../../textures/cubemap_yokohama_bc3_unorm.ktx";
+    //    format = VK_FORMAT_BC2_UNORM_BLOCK;
+    //}
+    //else if (device_features_.textureCompressionASTC_LDR) {
+    //    filename = "../../textures/cubemap_yokohama_astc_8x8_unorm.ktx";
+    //    format = VK_FORMAT_ASTC_8x8_UNORM_BLOCK;
+    //}
+    //else if (device_features_.textureCompressionETC2) {
+    //    filename = "../../textures/cubemap_yokohama_etc2_unorm.ktx";
+    //    format = VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK;
+    //}
+    //else {
+    //    throw std::runtime_error("failed to find suitable format for cubemap");
+    //}
+
+
+    filename = "../../textures/gcanyon_cube.ktx";
+    format = VK_FORMAT_R16G16B16A16_SFLOAT;
     auto& cubemap = skybox_.skyBoxCube.cubemap;
 
     cubemap.textureInfo.path = filename;
@@ -3259,7 +3273,7 @@ void VulkanApp::prepareSkyboxTexture()
 }
 
 void VulkanApp::loadSkyboxMesh() {
-    skybox_.skyBoxCube.mesh.meshPath = "../../models/cube.obj";
+    skybox_.skyBoxCube.mesh.meshPath = "../../models/maya_cube.obj";
     loadSingleSceneObjectMesh(skybox_.skyBoxCube.mesh);
 }
 
@@ -4151,13 +4165,19 @@ void VulkanApp::updateUniformBuffers() {
         model0_ubo.uniformBuffer.deviceMemory,
         &model0_ubo.content, sizeof(model0_ubo.content));
 
-    modelMat = glm::scale(glm::vec3(2.f, 2.f, 2.f));
     modelMat = glm::translate(glm::vec3(0.f, -2.f, 0.f));
     auto& model1_ubo = scene_objects_[1].uniformBufferAndContent;
     model1_ubo.content.modelMatrix = modelMat;
     uniformBufferCpy(
         model1_ubo.uniformBuffer.deviceMemory,
         &model1_ubo.content, sizeof(model1_ubo.content));
+
+    modelMat = glm::translate(glm::vec3(2.f, -2.f, 0.f));
+    auto& model2_ubo = scene_objects_[2].uniformBufferAndContent;
+    model2_ubo.content.modelMatrix = modelMat;
+    uniformBufferCpy(
+        model2_ubo.uniformBuffer.deviceMemory,
+        &model2_ubo.content, sizeof(model2_ubo.content));
     
     // skybox
     auto& skybox_ubo = skybox_.uniformBufferAndContent;
@@ -4180,7 +4200,7 @@ void VulkanApp::updateUniformBuffers() {
     lightDir.y = sin(time * 1.f);
     lightDir.z = cos(-time * 1.f);
     deferred_ubo.content.lightPos = lightDir;
-    apputil::printVec3(lightDir);
+    apputil::printVec3(deferred_ubo.content.eyePos);
 
     uniformBufferCpy(
         deferred_ubo.uniformBuffer.deviceMemory,
@@ -4200,7 +4220,7 @@ glm::mat4 VulkanApp::getSkyboxModelMat() {
     // skybox cam
     glm::mat4 modelMat = glm::mat4(1.0f);
     glm::vec3 forward = firstPersonCam->GetForward();
-    modelMat = glm::rotate(modelMat, -forward.y,
+    modelMat = glm::rotate(modelMat, forward.y,
         glm::vec3(1.0f, 0.0f, 0.0f));
     
     // TODO debug this 
