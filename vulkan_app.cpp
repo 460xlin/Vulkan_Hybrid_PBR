@@ -20,7 +20,7 @@ std::chrono::time_point<std::chrono::steady_clock> LAST_RECORD_TIME;
 float FRAME_GAP_TIME;
 
 #include <glm/gtx/intersect.hpp>
-// #define ONLY_RT
+ #define ONLY_RT
 
 
 void INIT_GLOBAL_TIME() {
@@ -1479,7 +1479,7 @@ void VulkanApp::rt_prepareStorageBuffers() {
    
     // Spheres
     std::vector<Sphere> spheres;
-    spheres.push_back(newSphere(glm::vec3(0.0f), 1.0f, glm::vec3(0.0f, 1.0f, 0.0f), 32.0f));
+    spheres.push_back(newSphere(glm::vec3(0.0f), 0.5f, glm::vec3(0.0f, 1.0f, 0.0f), 32.0f));
     //spheres.push_back(newSphere(glm::vec3(0.0f, 1.0f, -0.5f), 1.0f, glm::vec3(0.65f, 0.77f, 0.97f), 32.0f));
     //spheres.push_back(newSphere(glm::vec3(-1.75f, -0.75f, -0.5f), 1.25f, glm::vec3(0.9f, 0.76f, 0.46f), 32.0f));
     VkDeviceSize sphereStorageBufferSize = spheres.size() * sizeof(Sphere);
@@ -2366,7 +2366,7 @@ void VulkanApp::rt_updateUniformBuffer() {
 
 void VulkanApp::rt_loadObj() {
 
-    std::string file_path = "../../models/pipe_low.obj";
+    std::string file_path = "../../models/maya_cube.obj";
 
 	std::vector<Triangle> triangles;
 	std::vector<Vertex> vertices;
@@ -2448,10 +2448,10 @@ void VulkanApp::rt_loadObj() {
 			}
 
 			// push_back
-			for (int j = 0; j < 3; ++j) {
-				vertices.push_back(verts[j]);
-				indices.push_back(indices.size());
-			}
+			//for (int j = 0; j < 3; ++j) {
+			//	vertices.push_back(verts[j]);
+			//	indices.push_back(indices.size());
+			//}
 
 			Triangle temp;
             temp.vert_0 = glm::vec4(verts[0].pos, 0.0f);
@@ -2588,19 +2588,8 @@ void VulkanApp::createOffscreenDescriptorSetLayout() {
             4,
             VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
             1,
-            VK_SHADER_STAGE_FRAGMENT_BIT),
-		//// binding 5: cubemap texture
-		//apputil::createDescriptorSetLayoutBinding(
-		//	5,
-		//	VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		//	1,
-		//	VK_SHADER_STAGE_FRAGMENT_BIT),
-		//// binding 6: uniform buf (cam)
-		// apputil::createDescriptorSetLayoutBinding(
-		//	6,
-		//	VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		//	1,
-		//	VK_SHADER_STAGE_VERTEX_BIT)
+            VK_SHADER_STAGE_FRAGMENT_BIT)
+
 
     };
 
