@@ -14,101 +14,13 @@
 #include <gli/gli.hpp>
 #include <glm/gtc/constants.hpp>
 
-
-// temp
-//#include <glm/gtx/intersect.hpp>
-//using namespace glm;
-//
-//void temp()
-//{
-//	glm::vec3 rayO;
-//	glm::vec3 rayD;
-//	glm::vec3 a;
-//	glm::vec3 b;
-//	glm::vec3 c;
-//	glm::vec2 bary;
-//	float distance;
-//
-//	glm::vec3 bary2;
-//
-//	bool result = glm::intersectRayTriangle(
-//			rayO, rayD,
-//			a, b, c,
-//			bary, distance);
-//}
-//bool intersectRayTriangle
-//(
-//
-//
-//	vec3 const& orig, vec3 const& dir,
-//	vec3 const& vert0, vec3 const& vert1, vec3 const& vert2,
-//	vec2& baryPosition, float& distance
-//)
-//{
-//	// find vectors for two edges sharing vert0
-//	vec3 const edge1 = vert1 - vert0;
-//	vec3 const edge2 = vert2 - vert0;
-//
-//	// begin calculating determinant - also used to calculate U parameter
-//	vec3 const p = cross(dir, edge2);
-//
-//	// if determinant is near zero, ray lies in plane of triangle
-//	float const det = dot(edge1, p);
-//
-//	vec3 qvec;
-//
-//	if (det > std::numeric_limits<float>::epsilon())
-//	{
-//		// calculate distance from vert0 to ray origin
-//		vec3 const tvec = orig - vert0;
-//
-//		// calculate U parameter and test bounds
-//		baryPosition.x = glm::dot(tvec, p);
-//		if (baryPosition.x < static_cast<float>(0) || baryPosition.x > det)
-//			return false;
-//
-//		// prepare to test V parameter
-//		qvec = cross(tvec, edge1);
-//
-//		// calculate V parameter and test bounds
-//		baryPosition.y = dot(dir, qvec);
-//		if ((baryPosition.y < static_cast<float>(0)) || ((baryPosition.x + baryPosition.y) > det))
-//			return false;
-//	}
-//	else if (det < -std::numeric_limits<float>::epsilon())
-//	{
-//		// calculate distance from vert0 to ray origin
-//		vec3 const tvec = orig - vert0;
-//
-//		// calculate U parameter and test bounds
-//		baryPosition.x = dot(tvec, p);
-//		if ((baryPosition.x > static_cast<float>(0)) || (baryPosition.x < det))
-//			return false;
-//
-//		// prepare to test V parameter
-//		qvec = cross(tvec, edge1);
-//
-//		// calculate V parameter and test bounds
-//		baryPosition.y = dot(dir, qvec);
-//		if ((baryPosition.y > static_cast<float>(0)) || (baryPosition.x + baryPosition.y < det))
-//			return false;
-//	}
-//	else
-//		return false; // ray is parallel to the plane of the triangle
-//
-//	float inv_det = static_cast<float>(1) / det;
-//
-//	// calculate distance, ray intersects triangle
-//	distance = dot(edge2, qvec) * inv_det;
-//	baryPosition *= inv_det;
-//
-//	return true;
-//}
-
-
 // Timers =================================================
 std::chrono::time_point<std::chrono::steady_clock> START_TIME;
 std::chrono::time_point<std::chrono::steady_clock> LAST_RECORD_TIME;
+
+#include <glm/gtx/intersect.hpp>
+
+
 
 void INIT_GLOBAL_TIME() {
     START_TIME = std::chrono::high_resolution_clock::now();
@@ -270,28 +182,29 @@ void VulkanApp::initVulkan() {
     createDescriptorPool();
     createDepthResources();
     setupVertexDescriptions();
-    // begin offscreen ==========================================
-    // scene objects need offscreen's ubo, so has to be before object
+ //   // begin offscreen ==========================================
+ //   // scene objects need offscreen's ubo, so has to be before object
 
-	prepareSkybox();
-    prepareSceneObjectsData();
+	//prepareSkybox();
+ //   prepareSceneObjectsData();
 
-	// in this prepare offscreen function,
-	// we prepare the renderpass and framebuffer 
-	// which will be used to create skybox pipeline
-    prepareOffscreen();
+	//// in this prepare offscreen function,
+	//// we prepare the renderpass and framebuffer 
+	//// which will be used to create skybox pipeline
+ //   prepareOffscreen();
 
-	// because create pipeline need renderpass which now is offscreen.renderpass
-	createSkyboxPipeline();
+	//// because create pipeline need renderpass which now is offscreen.renderpass
+	//createSkyboxPipeline();
 
-    prepareSceneObjectsDescriptor();
-    prepareOffscreenCommandBuffer();
-    prepareDeferred();
+ //   prepareSceneObjectsDescriptor();
+ //   prepareOffscreenCommandBuffer();
+ //   prepareDeferred();
 
-	// ray tracing pipeline
-	/*rt_createSema();
+	 //ray tracing pipeline
+	rt_createSema();
 	rt_createUniformBuffers();
 	rt_prepareStorageBuffers();
+	rt_prepareObjFileBuffer();
 	rt_prepareTextureTarget(rt_result, VK_FORMAT_R8G8B8A8_UNORM);
 	rt_graphics_setupDescriptorSetLayout();
 	rt_graphics_setupDescriptorSet();
@@ -301,17 +214,17 @@ void VulkanApp::initVulkan() {
 	rt_createPipeline();
 	rt_prepareCompute();
 	rt_createComputeCommandBuffer();
-	rt_createRaytraceDisplayCommandBuffer();*/
+	rt_createRaytraceDisplayCommandBuffer();
 }
 
 void VulkanApp::mainLoop() {
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
-       /* rt_draw();
-		rt_updateUniformBuffer();*/
+        rt_draw();
+		rt_updateUniformBuffer();
 
-        draw_new();
-        updateUniformBuffers();
+        //draw_new();
+        //updateUniformBuffers();
     }
 
     vkDeviceWaitIdle(device_);
@@ -1565,15 +1478,21 @@ void VulkanApp::rt_createUniformBuffers() {
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 		uniformBuffers.rt_compute.buffer, uniformBuffers.rt_compute.deviceMem
 	);
+
+	VkDeviceSize rtGeomSize = sizeof(RT_GEOM);
+	createBuffer(rtGeomSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+		uniformBuffers.rt_geom.buffer, uniformBuffers.rt_geom.deviceMem
+	);
 }
 
 void VulkanApp::rt_prepareStorageBuffers() {
    
     // Spheres
     std::vector<Sphere> spheres;
-    spheres.push_back(newSphere(glm::vec3(1.75f, -0.5f, 0.0f), 1.0f, glm::vec3(0.0f, 1.0f, 0.0f), 32.0f));
-    spheres.push_back(newSphere(glm::vec3(0.0f, 1.0f, -0.5f), 1.0f, glm::vec3(0.65f, 0.77f, 0.97f), 32.0f));
-    spheres.push_back(newSphere(glm::vec3(-1.75f, -0.75f, -0.5f), 1.25f, glm::vec3(0.9f, 0.76f, 0.46f), 32.0f));
+    spheres.push_back(newSphere(glm::vec3(0.0f), 1.0f, glm::vec3(0.0f, 1.0f, 0.0f), 32.0f));
+    //spheres.push_back(newSphere(glm::vec3(0.0f, 1.0f, -0.5f), 1.0f, glm::vec3(0.65f, 0.77f, 0.97f), 32.0f));
+    //spheres.push_back(newSphere(glm::vec3(-1.75f, -0.75f, -0.5f), 1.25f, glm::vec3(0.9f, 0.76f, 0.46f), 32.0f));
     VkDeviceSize sphereStorageBufferSize = spheres.size() * sizeof(Sphere);
 
     VkBuffer sphereStagingBuffer;
@@ -1635,7 +1554,8 @@ void VulkanApp::rt_prepareStorageBuffers() {
 
 void VulkanApp::rt_prepareObjFileBuffer()
 {
-	compute.rt_scene_obj.meshPath = "../../models/cube.obj";
+	compute.rt_scene_obj.meshPath = "../../models/maya_cube.obj";
+	rt_loadObj(compute.rt_scene_obj);
 }
 
 
@@ -2039,8 +1959,21 @@ void VulkanApp::rt_prepareCompute() {
     rt_plane.binding = 3;
     rt_plane.descriptorCount = 1;
 
+	VkDescriptorSetLayoutBinding rt_tri;
+	rt_tri.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	rt_tri.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	rt_tri.binding = 4;
+	rt_tri.descriptorCount = 1;
+
+	// Binding 1: Uniform buffer block
+	VkDescriptorSetLayoutBinding rt_uniform_geom;
+	rt_uniform_geom.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	rt_uniform_geom.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	rt_uniform_geom.binding = 5;
+	rt_uniform_geom.descriptorCount = 1;
+
     std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
-        rt_storage, rt_uniform, rt_sphere, rt_plane
+        rt_storage, rt_uniform, rt_sphere, rt_plane, rt_tri, rt_uniform_geom
     };
 
     VkDescriptorSetLayoutCreateInfo descriptorLayout{};
@@ -2103,6 +2036,20 @@ void VulkanApp::rt_prepareCompute() {
     //rt_storage_plane.range = VK_WHOLE_SIZE;
     rt_storage_plane.range = 6 * sizeof(Plane);
 
+	VkDescriptorBufferInfo rt_storage_tri{};
+	rt_storage_tri.buffer = compute.rt_scene_obj.buffer;
+	rt_storage_tri.offset = 0;
+	rt_storage_tri.range = VK_WHOLE_SIZE;
+
+	VkDescriptorBufferInfo rt_uniform_geom_bufferInfo{};
+	rt_uniform_geom_bufferInfo.buffer = uniformBuffers.rt_geom.buffer;
+	rt_uniform_geom_bufferInfo.offset = 0;
+	rt_uniform_geom_bufferInfo.range = sizeof(RT_GEOM);
+
+	// update desbuffinfo for computer's union buffer
+	uniformBuffers.rt_geom.desBuffInfo = rt_uniform_geom_bufferInfo;
+
+
 
     // Binding 0: Output storage image
     VkWriteDescriptorSet rt_out_storage{};
@@ -2140,9 +2087,34 @@ void VulkanApp::rt_prepareCompute() {
     rt_uni_storage_plane.pBufferInfo = &rt_storage_plane;
     rt_uni_storage_plane.descriptorCount = 1;
 
+	// Binding 4: Shader storage buffer for the planes
+	VkWriteDescriptorSet rt_uni_storage_tri{};
+	rt_uni_storage_tri.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	rt_uni_storage_tri.dstSet = compute.rt_computeDescriptorSet;
+	rt_uni_storage_tri.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	rt_uni_storage_tri.dstBinding = 4;
+	rt_uni_storage_tri.pBufferInfo = &rt_storage_tri;
+	rt_uni_storage_tri.descriptorCount = 1;
+
+
+	// Binding 1: Uniform buffer block
+	VkWriteDescriptorSet rt_uni_geom_block{};
+	rt_uni_geom_block.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	rt_uni_geom_block.dstSet = compute.rt_computeDescriptorSet;
+	rt_uni_geom_block.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	rt_uni_geom_block.dstBinding = 5;
+	rt_uni_geom_block.pBufferInfo = &uniformBuffers.rt_geom.desBuffInfo;
+	rt_uni_geom_block.descriptorCount = 1;
+
+
     std::vector<VkWriteDescriptorSet> computeWriteDescriptorSets =
     {
-        rt_out_storage, rt_uni_block, rt_uni_storage_sphere, rt_uni_storage_plane
+        rt_out_storage,
+		rt_uni_block,
+		rt_uni_storage_sphere,
+		rt_uni_storage_plane,
+		rt_uni_storage_tri,
+		rt_uni_geom_block
     };
 
     vkUpdateDescriptorSets(device_, computeWriteDescriptorSets.size(), computeWriteDescriptorSets.data(), 0, NULL);
@@ -2373,6 +2345,7 @@ void VulkanApp::rt_updateUniformBuffer() {
 	auto currentTime = std::chrono::high_resolution_clock::now();
 	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count() / 10.f;
 
+	// rt_ubo
 	rt_ubo.lightPos.x = 0.0f + sin(glm::radians(time * 360.0f)) * cos(glm::radians(time * 360.0f)) * 2.0f;
 	rt_ubo.lightPos.y = 0.0f + sin(glm::radians(time * 360.0f)) * 2.0f;
 	rt_ubo.lightPos.z = 0.0f + cos(glm::radians(time * 360.0f)) * 2.0f;
@@ -2383,20 +2356,29 @@ void VulkanApp::rt_updateUniformBuffer() {
 	vkMapMemory(device_, uniformBuffers.rt_compute.deviceMem, 0, sizeof(rt_ubo), 0, &data);
 	memcpy(data, &rt_ubo, sizeof(rt_ubo));
 	vkUnmapMemory(device_, uniformBuffers.rt_compute.deviceMem);
+
+
+
+
+	// scene object positions
+	glm::mat4 modelMat;
+	modelMat = glm::translate(glm::vec3(0.f, 2.f, 0.f));
+
+	// rt_g
+	rt_g.transform = modelMat;
+	rt_g.inverseTransform = glm::inverse(modelMat);
+	void* geom_data;
+	vkMapMemory(device_, uniformBuffers.rt_geom.deviceMem, 0, sizeof(rt_g), 0, &geom_data);
+	memcpy(geom_data, &rt_g, sizeof(rt_g));
+	vkUnmapMemory(device_, uniformBuffers.rt_geom.deviceMem);
 }
 
 
 void VulkanApp::rt_loadObj(RT_AppSceneObject& object_struct) {
-	struct Vertex {
-		float pos[3];
-		float uv[2];
-		float col[3];
-		float normal[3];
-		float tangent[3];
-	};
 
 	std::string file_path = object_struct.meshPath;
 
+	std::vector<Triangle> triangles;
 	std::vector<Vertex> vertices;
 	std::vector<uint32_t> indices;
 
@@ -2411,11 +2393,9 @@ void VulkanApp::rt_loadObj(RT_AppSceneObject& object_struct) {
 		throw std::runtime_error(warn + err);
 	}
 
-	int colorRounding = 1333;
 	for (const auto& shape : shapes) {
 		// +3 for per triangle
 		for (int i = 0; i < shape.mesh.indices.size(); i += 3) {
-			colorRounding += 1333333;
 			Vertex verts[3];
 			const tinyobj::index_t idx[] = {
 				shape.mesh.indices[i],
@@ -2423,10 +2403,10 @@ void VulkanApp::rt_loadObj(RT_AppSceneObject& object_struct) {
 				shape.mesh.indices[i + 2] };
 
 			float colorVul[3];
-			colorVul[0] = (float)(colorRounding % 255) / (float)255;
-			colorRounding += 345256;
+			colorVul[0] = 0.0;
 			colorVul[1] = 0.f;
-			colorVul[2] = (float)(colorRounding % 255) / (float)255;
+			colorVul[2] = 0.f;
+
 
 			for (int j = 0; j < 3; ++j) {
 				const auto& index = idx[j];
@@ -2484,30 +2464,64 @@ void VulkanApp::rt_loadObj(RT_AppSceneObject& object_struct) {
 				vertices.push_back(verts[j]);
 				indices.push_back(indices.size());
 			}
+
+			Triangle temp;
+			temp.triverts[0] = verts[0];
+			temp.triverts[1] = verts[1];
+			temp.triverts[2] = verts[2];
+			temp.Trinormal = glm::normalize(glm::cross(verts[0].pos - verts[1].pos, verts[0].pos - verts[2].pos));
+
+			triangles.push_back(temp);
 		}
 	}
 
-	object_struct.vertexCount = static_cast<uint32_t>(vertices.size());
-	object_struct.indexCount = static_cast<uint32_t>(indices.size());
-	object_struct.triangleCount = object_struct.vertexCount / 3;
+
+	// test ============================================================================== // 
+	std::cout << "==============================================================================" << std::endl;
+
+	std::cout << "Triangles count: " << triangles.size() << std::endl;
+	for (int i = 0; i < triangles.size(); i++)
+	{
+		std::cout << triangles[i].Trinormal[0] << ", " << triangles[i].Trinormal[1] << ", " << triangles[i].Trinormal[2] << std::endl;
+	}
+	std::cout << "==============================================================================" << std::endl;
+	object_struct.triangleCount = triangles.size();
+
+	triangles.clear();
+
+	Vertex vert0{};
+	vert0.pos = glm::vec3(-4, 4, 4);
+
+	Vertex vert1{};
+	vert1.pos = glm::vec3(-2, -2, 2);
+
+	Vertex vert2{};
+	vert2.pos = glm::vec3(3, 3, -3);
+
+	Triangle tri_0{};
+	tri_0.triverts[0] = vert0;
+	tri_0.triverts[1] = vert1;
+	tri_0.triverts[2] = vert2;
+
+	triangles.push_back(tri_0);
 
 	// create vertex buffer for arbitary  model
-	VkDeviceSize vertexBufferSize = sizeof(Vertex) * vertices.size();
+	VkDeviceSize triBufferSize = sizeof(Triangle) * triangles.size();
 
 	VkBuffer StagingBuffer;
 	VkDeviceMemory StagingBufferMemory;
-	createBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+	createBuffer(triBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
 		StagingBuffer, StagingBufferMemory);
 
 	void* data;
-	vkMapMemory(device_, StagingBufferMemory, 0, vertexBufferSize, 0,
+	vkMapMemory(device_, StagingBufferMemory, 0, triBufferSize, 0,
 		&data);
-	memcpy(data, vertices.data(), (size_t)vertexBufferSize);
+	memcpy(data, triangles.data(), (size_t)triBufferSize);
 	vkUnmapMemory(device_, StagingBufferMemory);
 
 	createBuffer(
-		vertexBufferSize,
+		triBufferSize,
 		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
 		object_struct.buffer,
@@ -2515,7 +2529,7 @@ void VulkanApp::rt_loadObj(RT_AppSceneObject& object_struct) {
 	);
 
 	copyBuffer(StagingBuffer, object_struct.buffer,
-		vertexBufferSize);
+		triBufferSize);
 
 	vkDestroyBuffer(device_, StagingBuffer, nullptr);
 	vkFreeMemory(device_, StagingBufferMemory, nullptr);	

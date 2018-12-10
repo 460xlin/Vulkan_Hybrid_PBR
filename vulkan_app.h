@@ -80,6 +80,13 @@ struct RTUniformBufferObject {							// Compute shader uniform block object
     } camera;
 };
 
+struct RT_GEOM
+{
+	glm::mat4 transform;
+	glm::mat4 inverseTransform;
+};
+
+
 struct MyTexture
 {
     VkImage textureImage;
@@ -285,6 +292,7 @@ private:
 	uint32_t rt_currentId = 0;
 	MyTexture rt_result;
 	RTUniformBufferObject rt_ubo;
+	RT_GEOM rt_g;
 	std::vector<VkCommandBuffer> rt_drawCommandBuffer;
 	VkSemaphore rt_sema;
 
@@ -294,6 +302,7 @@ private:
 		// union buffer
 	struct {
 		MyUniformBuffer rt_compute;
+		MyUniformBuffer rt_geom;
 	} uniformBuffers;
 	
 	struct {

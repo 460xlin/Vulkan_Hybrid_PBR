@@ -11,7 +11,7 @@ layout (binding = 0, rgba8) uniform writeonly image2D resultImage;
 #define EPSILON 0.0001
 #define MAXLEN 1000.0
 #define SHADOW 0.5
-#define RAYBOUNCES 0
+#define RAYBOUNCES 3
 #define REFLECTIONS false
 #define REFLECTIONSTRENGTH 0.4
 #define REFLECTIONFALLOFF 0.5
@@ -61,40 +61,6 @@ layout (std140, binding = 3) buffer Planes // use the assigned size of memory
 	Plane planes[ ];
 };
 
-// Triangle ===========================================================
-
-struct BoundingBox
-{
-	vec3 maxB;
-	vec3 minB;
-};
-
-struct Vertex {
-	vec3 pos;
-	vec2 uv;
-	vec3 col;
-	vec3 normal;
-	vec3 tangent;
-};
-
-struct Triangle
-{
-	int triidx;
-	Vertex triverts[3];
-	vec3 trinormal;
-	BoundingBox bbx;
-};
-
-layout (std140, binding = 4) buffer Triangles // use the assigned size of memory
-{
-	Triangle triangles[ ];
-};
-
-layout (binding = 5) uniform GEOM 
-{
-	mat4 transform;
-	mat4 inverseTransform;
-} geom;
 
 
 void reflectRay(inout vec3 rayD, in vec3 mormal)
@@ -157,16 +123,57 @@ float planeIntersect(vec3 rayO, vec3 rayD, Plane plane)
 
 // // Triangle ===========================================================
 
-vec3 getPointOnRay(vec3 rayO, vec3 rayD, float t) {
-    return rayO + (t - .0001f) * normalize(rayD);
+struct Ray {
+    vec3 origin;
+    vec3 direction;
+};
+
+struct BoundingBox
+{
+	vec3 maxB;
+	vec3 minB;
+};
+
+struct Vertex {
+	vec3 pos;
+	vec2 uv;
+	vec3 col;
+	vec3 normal;
+	vec3 tangent;
+};
+
+struct Triangle
+{
+	int triidx;
+	Vertex Triverts[3];
+	vec3 Trinormal;
+	BoundingBox bbx;
+};
+
+layout (std140, binding = 4) buffer Triangles // use the assigned size of memory
+{
+	Triangle triangles[ ];
+};
+
+layout (binding = 5) uniform GEOM 
+{
+	vec3 translation;
+	vec3 rotation;
+	vec3 scale;
+	mat4 transform;
+	mat4 inverseTransform;
+	mat4 invTranspose;
+	int trianglesCount;
+} geom;
+
+
+vec3 getPointOnRay(Ray r, float t) {
+    return r.origin + (t - .0001f) * normalize(r.direction);
 }
 
 vec3 multiplyMV(mat4 m, vec4 v) {
 	return vec3(m * v);
 }
-
-
-
 
 bool intersectRayTriangle
 (	vec3 orig, vec3 dir,
@@ -194,17 +201,21 @@ bool intersectRayTriangle
 		// calculate U parameter and test bounds
 		baryPosition.x = dot(tvec, p);
 		if (baryPosition.x < 0.0f || baryPosition.x > det)
-			return false;
+		{
+			return false;			
+		}
 
 		// prepare to test V parameter
 		qvec = cross(tvec, edge1);
 
 		// calculate V parameter and test bounds
 		baryPosition.y = dot(dir, qvec);
-		if ((baryPosition.y < 0.0f) || ((baryPosition.x + baryPosition.y) > det))
+		if (baryPosition.y < 0.0f || (baryPosition.x + baryPosition.y) > det)
+		{
 			return false;
+		}
 	}
-	else if (det < EPSILON)
+	else if (det < -EPSILON)
 	{
 		// calculate distance from vert0 to ray origin
 		vec3 tvec = orig - vert0;
@@ -212,7 +223,9 @@ bool intersectRayTriangle
 		// calculate U parameter and test bounds
 		baryPosition.x = dot(tvec, p);
 		if ((baryPosition.x > 0.0f) || (baryPosition.x < det))
+		{
 			return false;
+		}
 
 		// prepare to test V parameter
 		qvec = cross(tvec, edge1);
@@ -220,10 +233,14 @@ bool intersectRayTriangle
 		// calculate V parameter and test bounds
 		baryPosition.y = dot(dir, qvec);
 		if ((baryPosition.y > 0.0f) || (baryPosition.x + baryPosition.y < det))
+		{
 			return false;
+		}
 	}
 	else
+	{
 		return false; // ray is parallel to the plane of the triangle
+	}
 
 	float inv_det = 1.0f / det;
 
@@ -235,45 +252,50 @@ bool intersectRayTriangle
 }
 
 
-float triangleIntersectionTest(vec3 rRayO, vec3 rRayD,
-	// inout vec3 intersectionPoint,
-	//  inout vec3 normal,
-	 Triangle tri)
+float triangleIntersectionTest(Ray r,
+	inout vec3 intersectionPoint, inout vec3 normal, inout bool outside ,Triangle tri)
 {
-	// vec3 qRayO = multiplyMV(geom.inverseTransform, vec4(rRayO, 1.0f));
-	// vec3 qRayD = normalize(multiplyMV(geom.inverseTransform, vec4(rRayD, 0.0f)));
-	// vec3 qRayO = rRayO;
-	// vec3 qRayD = rRayD;
+	Ray q;
+	q.origin = multiplyMV(geom.inverseTransform, vec4(r.origin, 1.0f));
+	q.direction = normalize(multiplyMV(geom.inverseTransform, vec4(r.direction, 0.0f)));
+
 	vec2 bary;
 	float temp_distance;
 
-	float t = MAXLEN;
-	if (intersectRayTriangle(rRayO, rRayD, tri.triverts[0].pos, tri.triverts[1].pos, tri.triverts[2].pos, bary, temp_distance)) {
+	float t = -1;
+	if (intersectRayTriangle(q.origin, q.direction, tri.Triverts[0].pos, tri.Triverts[1].pos, tri.Triverts[2].pos, bary, temp_distance)) {
 		t = temp_distance;
 	}
 
-	// vec3 objspaceIntersection = getPointOnRay(qRayO, qRayD, t);
-	//normal = glm::normalize(glm::cross(tri.Triverts[0].pos - tri.Triverts[1].pos, tri.Triverts[0].pos - tri.Triverts[2].pos))/*tri.Trinormal*/;
-	// normal = tri.trinormal;
-	// normal = normalize(multiplyMV(geom.transform, vec4(normal, 0.0f)));
+	vec3 objspaceIntersection = getPointOnRay(q, t);
+
+	intersectionPoint = multiplyMV(geom.transform, vec4(objspaceIntersection, 1.f));
+
+	normal = normalize(cross(tri.Triverts[0].pos - tri.Triverts[1].pos, tri.Triverts[0].pos - tri.Triverts[2].pos))/*tri.Trinormal*/;
+	normal = normalize(multiplyMV(geom.transform, vec4(normal, 0.0f)));
+	outside = true;
+
+	if (dot(q.origin, normal) < 0) {
+		outside = false;
+	}
 
 	return t;
 }
 
 // Triangle end ===========================================================
 
-bool intersect(in vec3 rayO, in vec3 rayD, inout float resT, inout int triIndex)
+int intersect(in vec3 rayO, in vec3 rayD, inout float resT)
 {
+	int id = -1;
 
-	bool beHit = false;
+
 	// buffer length, the num of spheres
 	for (int i = 0; i < spheres.length(); i++)
 	{
 		float tSphere = sphereIntersect(rayO, rayD, spheres[i]);
 		if ((tSphere > EPSILON) && (tSphere < resT))
 		{
-			beHit = true;
-			triIndex = spheres[i].id;
+			id = spheres[i].id;
 			resT = tSphere;
 		}
 	}	
@@ -283,29 +305,14 @@ bool intersect(in vec3 rayO, in vec3 rayD, inout float resT, inout int triIndex)
 		float tplane = planeIntersect(rayO, rayD, planes[i]);
 		if ((tplane > EPSILON) && (tplane < resT))
 		{
-			beHit = true;
-			triIndex = planes[i].id;
+			id = planes[i].id;
 			resT = tplane;
 		}	
 	}
 
-
-	for (int i = 0; i < triangles.length(); i++)
-	{
-		float tTri = triangleIntersectionTest(rayO, rayD, triangles[i]);
-		if ((tTri > EPSILON) && (tTri < resT))
-		{
-			// if(!outside)
-			// {
-				beHit = true;
-				triIndex = 99999;
-				resT = tTri;
-			// }
-		}
-	}
-
 	
-	return beHit;
+	
+	return id;
 }
 
 // rayO: intersection point
@@ -330,10 +337,7 @@ float calcShadow(in vec3 rayO, in vec3 rayD, in int objectId, inout float t)
 				return 0.0;
 			}
 		}
-	}
-
-
-
+	}		
 	return 1.0;
 }
 
@@ -344,21 +348,13 @@ vec3 renderScene(inout vec3 rayO, inout vec3 rayD, inout int id)
 	float t = MAXLEN;
 
 	// Get intersected object ID
-	int triIndex = -1;
-
-	// t will be modified
-	bool beHit = intersect(rayO, rayD, t, triIndex); 
+	int objectID = intersect(rayO, rayD, t); // t will be modified
 	
-	if (!beHit) // ray does not reach anything
+	if (objectID == -1) // ray does not reach anything
 	{
 		return color;
 	}
 	
-	if( t > MAXLEN - 1)
-	{
-		return color;
-	}
-
 	vec3 pos = rayO + t * rayD;// the pos of intersection point, t is the length from camera to intersection point
 	vec3 lightVec = normalize(ubo.lightPos - pos);				
 	vec3 normal;
@@ -369,7 +365,7 @@ vec3 renderScene(inout vec3 rayO, inout vec3 rayD, inout int id)
 
 	for (int i = 0; i < planes.length(); i++)
 	{
-		if (triIndex == planes[i].id)
+		if (objectID == planes[i].id)
 		{
 			normal = planes[i].normal;
 			color = planes[i].diffuse;
@@ -378,33 +374,27 @@ vec3 renderScene(inout vec3 rayO, inout vec3 rayD, inout int id)
 
 	for (int i = 0; i < spheres.length(); i++)
 	{
-		if (triIndex == spheres[i].id)
+		if (objectID == spheres[i].id)
 		{
 			normal = sphereNormal(pos, spheres[i]);				
-			color = vec3(1.0, 0.0, 0.0);	// diffuse is the diffuse color of sphere
+			color = vec3(1.0, 1.0, 1.0);	// diffuse is the diffuse color of sphere
 		}
 	}
 
-	if(triIndex == 99999)
-	{
-		color = vec3(0.0, 0.0, 0.0);
+	if (id == -1)
+		return color;
 
-	}
-
-	// if (id == -1)
-	// 	return color;
-
-	// id = triIndex;
+	id = objectID;
 
 	// Shadows
-	// t = length(ubo.lightPos - pos); // the t of position from light to intersection
-	// color *= calcShadow(pos, lightVec, id, t);
+	t = length(ubo.lightPos - pos); // the t of position from light to intersection
+	color *= calcShadow(pos, lightVec, id, t);
 
 	
 	// Reflect ray for next render pass
 	// RayO now is the point of intersection
-	//reflectRay(rayD, normal);
-	//rayO = pos;	
+	reflectRay(rayD, normal);
+	rayO = pos;	
 	
 	return color;
 }
@@ -424,6 +414,19 @@ void main()
 	// Basic color path
 	int id = 0;
 	vec3 finalColor = renderScene(rayO, rayD, id);
+
+	// we change the rayD and rayO for reflection operation
+	// Reflection
+	if (REFLECTIONS)
+	{
+		float reflectionStrength = REFLECTIONSTRENGTH;
+		for (int i = 0; i < RAYBOUNCES; i++)
+		{
+			vec3 reflectionColor = renderScene(rayO, rayD, id);
+			finalColor = (1.0 - reflectionStrength) * finalColor + reflectionStrength * mix(reflectionColor, finalColor, 1.0 - reflectionStrength);			
+			reflectionStrength *= REFLECTIONFALLOFF;
+		}
+	}
 			
 	imageStore(resultImage, ivec2(gl_GlobalInvocationID.xy), vec4(finalColor, 0.0));
 }

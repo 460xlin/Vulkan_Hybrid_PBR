@@ -61,8 +61,6 @@ struct AppSceneObject {
 struct RT_AppSceneObject {
 
 	std::string meshPath;
-	uint32_t vertexCount;
-	uint32_t indexCount;
 	uint32_t triangleCount;
 
 	VkBuffer buffer;
@@ -191,11 +189,11 @@ namespace apputil {
 
 
 struct Vertex {
-	float pos[3];
-	float uv[2];
-	float col[3];
-	float normal[3];
-	float tangent[3];
+	glm::vec3 pos;
+	glm::vec2 uv;
+	glm::vec3 col;
+	glm::vec3 normal;
+	glm::vec3 tangent;
 };
 
 
@@ -208,7 +206,7 @@ struct BoundingBox
 struct Triangle
 {
 	int triidx;
-	Vertex Triverts[3];
+	Vertex triverts[3];
 	glm::vec3 Trinormal;
 	BoundingBox bbx;
 };
