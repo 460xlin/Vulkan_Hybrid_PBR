@@ -11,7 +11,9 @@ layout (binding = 0) uniform UBO
 } ubo;
 
 vec3 u_LightColor = vec3(1.f, 1.f, 1.f);
-vec3 u_ScaleIBLAmbient = vec3(6.f);
+vec3 u_ScaleIBLAmbient = vec3(1.5f);
+float u_Exposure = 4.50;
+float u_Gamma = 2.20;
 
 layout (binding = 1) uniform sampler2D samplerPosition;
 layout (binding = 2) uniform sampler2D samplerNormal;
@@ -25,6 +27,31 @@ layout (location = 0) in vec2 inUV;
 
 // out
 layout (location = 0) out vec4 outFragColor;
+
+
+
+vec3 Uncharted2Tonemap(vec3 color)
+{
+	
+	float A = 0.15;
+	float B = 0.50;
+	float C = 0.10;
+	float D = 0.20;
+	float E = 0.02;
+	float F = 0.30;
+	float W = 11.2;
+
+	return ((color*(A*color+C*B)+D*E)/(color*(A*color+B)+D*F))-E/F;
+}
+
+vec3 CubeMapToneAndGamma(vec3 c) {
+	vec3 color = c;
+	color = Uncharted2Tonemap(color * u_Exposure);
+	color = color * (1.0f / Uncharted2Tonemap(vec3(11.2f)));	
+	// Gamma correction
+	color = pow(color, vec3(1.0f / u_Gamma));
+	return color;
+}
 
 // Encapsulate the various inputs used by the various functions in the shading equation
 // We store values in this struct to simplify the integration of alternative implementations
@@ -71,9 +98,12 @@ vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection)
     float lod = (pbrInputs.perceptualRoughness * mipCount);
     // retrieve a scale and bias to F0. See [1], Figure 3
     vec3 brdf = SRGBtoLINEAR(texture(samplerBrdfLUT, vec2(pbrInputs.NdotV, 1.0 - pbrInputs.perceptualRoughness))).rgb;
-    vec3 diffuseLight = SRGBtoLINEAR(texture(samplerCubemap, n)).rgb;
 
-    vec3 specularLight = SRGBtoLINEAR(texture(samplerCubemap, reflection)).rgb;
+    // vec3 diffuseLight = SRGBtoLINEAR(texture(samplerCubemap, -n)).rgb;
+    // vec3 specularLight = SRGBtoLINEAR(texture(samplerCubemap, -reflection)).rgb;
+
+	vec3 diffuseLight = CubeMapToneAndGamma(texture(samplerCubemap, -n, 7).rgb);
+    vec3 specularLight = CubeMapToneAndGamma(texture(samplerCubemap, -reflection).rgb);
 
     vec3 diffuse = diffuseLight * pbrInputs.diffuseColor;
     vec3 specular = specularLight * (pbrInputs.specularColor * brdf.x + brdf.y);
@@ -82,6 +112,7 @@ vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection)
     diffuse *= u_ScaleIBLAmbient.x;
     specular *= u_ScaleIBLAmbient.y;
 
+    // return specular;
     return diffuse + specular;
 }
 
@@ -126,9 +157,14 @@ float microfacetDistribution(PBRInfo pbrInputs)
 }
 
 void main() {
-	vec3 fragPos = texture(samplerPosition, inUV).xyz;
-	// the real texture is actually ao-m-r
-	vec3 mrao = texture(samplerMrao, inUV).zxy;
+	vec4 fragPosV4 = texture(samplerPosition, inUV);
+	vec3 fragColor = texture(samplerAlbedo, inUV).rgb;
+	if (fragPosV4.w < 1.0f) {
+		outFragColor = vec4(fragColor, 1.0f);
+		return;
+	}
+	vec3 fragPos = vec3(fragPosV4.x, fragPosV4.y, fragPosV4.z);
+	vec3 mrao = texture(samplerMrao, inUV).xyz;
     float metallic = mrao.x;
 	float perceptualRoughness = mrao.y;
 
@@ -145,8 +181,6 @@ void main() {
     vec3 diffuseColor = baseColor.rgb * (vec3(1.0) - f0);
     diffuseColor *= 1.0 - metallic;
     vec3 specularColor = mix(f0, baseColor.rgb, metallic);
-
-	
 
 	float reflectance = max(max(specularColor.r, specularColor.g), specularColor.b);
 
@@ -186,7 +220,6 @@ void main() {
         specularColor
     );
 
-
 	// Calculate the shading terms for the microfacet specular shading model
     vec3 F = specularReflection(pbrInputs);
     float G = geometricOcclusion(pbrInputs);
@@ -198,7 +231,8 @@ void main() {
     // Obtain final intensity as reflectance (BRDF) scaled by the energy of the light (cosine law)
     vec3 color = NdotL * u_LightColor * (diffuseContrib + specContrib);
 
-	color += getIBLContribution(pbrInputs, n, reflection);
+	vec3 IBLContribution = getIBLContribution(pbrInputs, n, reflection);
+	color += IBLContribution;
 
 	// IMPT: ao is used here
 	// raytrace is used here
@@ -213,8 +247,13 @@ void main() {
     // color = mix(color, specContrib, u_ScaleFGDSpec.w);
 
     // color = mix(color, diffuseContrib, u_ScaleDiffBaseMR.x);
-    // color = mix(color, baseColor.rgb, u_ScaleDiffBaseMR.y);
+    color = mix(color, baseColor.rgb, 0.3f);
     // color = mix(color, vec3(metallic), u_ScaleDiffBaseMR.z);
     // color = mix(color, vec3(perceptualRoughness), u_ScaleDiffBaseMR.w);
 	outFragColor = vec4(color, 1.f);
+	// outFragColor = vec4(fragPos, 1.f);
+
+
+	// outFragColor = texture(samplerAlbedo, inUV);
+	// outFragColor = vec4(IBLContribution, 1.f);
 }

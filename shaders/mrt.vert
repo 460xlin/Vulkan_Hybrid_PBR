@@ -37,11 +37,12 @@ void main()
 	vec4 tmpPos = vec4(inPos, 1.f);
 
 	gl_Position = camera.projMatrix * camera.viewMatrix * model.modelMatrix * tmpPos;
+	gl_Position.y = -gl_Position.y;
 	
 	// Vertex position in world space
 	outWorldPos = vec3(model.modelMatrix * tmpPos);
 	// GL to Vulkan coord space
-	outWorldPos.y = -outWorldPos.y;
+	// outWorldPos.y = -outWorldPos.y;
 	
 	// Normal in world space
 	mat3 mNormal = transpose(inverse(mat3(model.modelMatrix)));
