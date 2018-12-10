@@ -409,7 +409,7 @@ vec3 renderScene(inout vec3 rayO, inout vec3 rayD, inout int id)
 
 	if(triIndex == 99999)
 	{
-		normal = triNor;
+		normal = normalize(triNor);
 		color = vec3(1.0, 0.0, 1.0);
 
 	}
@@ -419,12 +419,39 @@ vec3 renderScene(inout vec3 rayO, inout vec3 rayD, inout int id)
 	//Shadows
 	id = triIndex;
 	t = length(ubo.lightPos - pos); // the t of position from light to intersection
-	color *= calcShadow(pos, lightVec, id, t);
+	// color *= calcShadow(pos, lightVec, id, t);
+	calcShadow(pos, lightVec, id, t);
+	float x = -1;
+	if(t < length(ubo.lightPos - pos))
+	{
+		x = t;
+	}
+
+	float z = -1;
+	t = MAXLEN;
+	calcShadow(pos, normal, id, t);
+	if( t < MAXLEN)
+	{
+		z = t;
+	}
+
+	float y = -1;
+	t = MAXLEN;
+	reflectRay(rayD, normal);
+	calcShadow(pos, normalize(rayD), id, t);
+	if( t < MAXLEN)
+	{
+		y = t;
+	}
+
+
+ 	color = vec3(x);
+ 	// color = vec3(y);
+
 
 	
 	// Reflect ray for next render pass
 	// RayO now is the point of intersection
-	reflectRay(rayD, normal);
 	rayO = pos;	
 	
 	return color;
