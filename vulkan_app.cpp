@@ -19,7 +19,7 @@ std::chrono::time_point<std::chrono::steady_clock> START_TIME;
 std::chrono::time_point<std::chrono::steady_clock> LAST_RECORD_TIME;
 
 #include <glm/gtx/intersect.hpp>
-// #define ONLY_RT
+ #define ONLY_RT
 
 
 void INIT_GLOBAL_TIME() {
@@ -2355,7 +2355,7 @@ void VulkanApp::rt_updateUniformBuffer() {
 
 void VulkanApp::rt_loadObj() {
 
-    std::string file_path = "../../models/pipe_low.obj";
+    std::string file_path = "../../models/substance_sphere.obj";
 
 	std::vector<Triangle> triangles;
 	std::vector<Vertex> vertices;
@@ -2577,19 +2577,8 @@ void VulkanApp::createOffscreenDescriptorSetLayout() {
             4,
             VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
             1,
-            VK_SHADER_STAGE_FRAGMENT_BIT),
-		//// binding 5: cubemap texture
-		//apputil::createDescriptorSetLayoutBinding(
-		//	5,
-		//	VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-		//	1,
-		//	VK_SHADER_STAGE_FRAGMENT_BIT),
-		//// binding 6: uniform buf (cam)
-		// apputil::createDescriptorSetLayoutBinding(
-		//	6,
-		//	VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-		//	1,
-		//	VK_SHADER_STAGE_VERTEX_BIT)
+            VK_SHADER_STAGE_FRAGMENT_BIT)
+
 
     };
 
