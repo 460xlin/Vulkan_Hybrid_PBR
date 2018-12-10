@@ -69,26 +69,21 @@ struct BoundingBox
 	vec3 minB;
 };
 
-struct Vertex {
-	vec3 pos;
-	vec2 uv;
-	vec3 col;
-	vec3 normal;
-	vec3 tangent;
-};
 
 struct Triangle
 {
-	int triidx;
-	Vertex triverts[3];
-	vec3 trinormal;
-	BoundingBox bbx;
+	vec4 trinormal;
+	vec4 vert_0;
+	vec4 vert_1;
+	vec4 vert_2;
+	vec4 testColor;
+
 };
 
 layout (std140, binding = 4) buffer Triangles // use the assigned size of memory
 {
 	Triangle triangles[ ];
-};
+} inTriangles;
 
 layout (binding = 5) uniform GEOM 
 {
@@ -242,13 +237,13 @@ float triangleIntersectionTest(vec3 rRayO, vec3 rRayD,
 {
 	// vec3 qRayO = multiplyMV(geom.inverseTransform, vec4(rRayO, 1.0f));
 	// vec3 qRayD = normalize(multiplyMV(geom.inverseTransform, vec4(rRayD, 0.0f)));
-	// vec3 qRayO = rRayO;
-	// vec3 qRayD = rRayD;
+	vec3 qRayO = rRayO;
+	vec3 qRayD = rRayD;
 	vec2 bary;
 	float temp_distance;
 
 	float t = MAXLEN;
-	if (intersectRayTriangle(rRayO, rRayD, tri.triverts[0].pos, tri.triverts[1].pos, tri.triverts[2].pos, bary, temp_distance)) {
+	if (intersectRayTriangle(rRayO, rRayD, tri.vert_0.xyz, tri.vert_1.xyz, tri.vert_2.xyz, bary, temp_distance)) {
 		t = temp_distance;
 	}
 
@@ -290,9 +285,9 @@ bool intersect(in vec3 rayO, in vec3 rayD, inout float resT, inout int triIndex)
 	}
 
 
-	for (int i = 0; i < triangles.length(); i++)
+	for (int i = 0; i < inTriangles.triangles.length(); i++)
 	{
-		float tTri = triangleIntersectionTest(rayO, rayD, triangles[i]);
+		float tTri = triangleIntersectionTest(rayO, rayD, inTriangles.triangles[i]);
 		if ((tTri > EPSILON) && (tTri < resT))
 		{
 			// if(!outside)
@@ -424,6 +419,18 @@ void main()
 	// Basic color path
 	int id = 0;
 	vec3 finalColor = renderScene(rayO, rayD, id);
+	// finalColor = vec3(triangles[0].triverts[0].pos.y);
+	// finalColor = vec3(triangles[0].trinormal);
+	// finalColor = vec3(triangles[0].testColor.y);
+
+
+	// finalColor = vec3(triangles[0].triidx);
+
+	// finalColor = vec3(planes[0].normal);
+
+	// finalColor = vec3(inTriangles.triangles[0].testColor);
+
 			
-	imageStore(resultImage, ivec2(gl_GlobalInvocationID.xy), vec4(finalColor, 0.0));
+	// imageStore(resultImage, ivec2(gl_GlobalInvocationID.xy), vec4(finalColor, 0.0));
+	imageStore(resultImage, ivec2(gl_GlobalInvocationID.xy), vec4(finalColor, 1.0));
 }

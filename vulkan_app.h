@@ -287,7 +287,7 @@ private:
     Sphere newSphere(glm::vec3 pos, float radius, glm::vec3 diffuse, float specular);
     Plane newPlane(glm::vec3 normal, float distance, glm::vec3 diffuse, float specular);
 	void rt_updateUniformBuffer();
-	void rt_loadObj(RT_AppSceneObject& object_struct);
+	void rt_loadObj();
 
 	uint32_t rt_currentId = 0;
 	MyTexture rt_result;
@@ -320,9 +320,9 @@ private:
         {
             VkBuffer buffer;
             VkDeviceMemory deviceMem;
-        }myPlaneBuffer, mySphereBuffer;
+        }myPlaneBuffer, mySphereBuffer, myTriBuffer;
 
-		RT_AppSceneObject rt_scene_obj;
+		//RT_AppSceneObject rt_scene_obj;
 
         VkDescriptorSetLayout rt_computeDescriptorSetLayout;
         VkDescriptorSet rt_computeDescriptorSet;

@@ -19,7 +19,7 @@ std::chrono::time_point<std::chrono::steady_clock> START_TIME;
 std::chrono::time_point<std::chrono::steady_clock> LAST_RECORD_TIME;
 
 #include <glm/gtx/intersect.hpp>
-
+#define ONLY_RT
 
 
 void INIT_GLOBAL_TIME() {
@@ -69,6 +69,10 @@ Camera* firstPersonCam;
 
 void VulkanApp::initCam() {
     firstPersonCam = new Camera(WIDTH, HEIGHT);
+    std::cout << sizeof(glm::vec3) << std::endl;
+    std::cout << " 3333333"<< std::endl;
+    std::cout << sizeof(float) << std::endl;
+
 }
 
 void VulkanApp::mouseDownCallback(GLFWwindow* window, int button, int action, int mods) {
@@ -182,25 +186,29 @@ void VulkanApp::initVulkan() {
     createDescriptorPool();
     createDepthResources();
     setupVertexDescriptions();
- //   // begin offscreen ==========================================
- //   // scene objects need offscreen's ubo, so has to be before object
+    // begin offscreen ==========================================
+    // scene objects need offscreen's ubo, so has to be before object
 
-	//prepareSkybox();
- //   prepareSceneObjectsData();
+#ifndef ONLY_RT
+    prepareSkybox();
+    prepareSceneObjectsData();
 
-	//// in this prepare offscreen function,
-	//// we prepare the renderpass and framebuffer 
-	//// which will be used to create skybox pipeline
- //   prepareOffscreen();
+    // in this prepare offscreen function,
+    // we prepare the renderpass and framebuffer 
+    // which will be used to create skybox pipeline
+    prepareOffscreen();
 
-	//// because create pipeline need renderpass which now is offscreen.renderpass
-	//createSkyboxPipeline();
+    // because create pipeline need renderpass which now is offscreen.renderpass
+    createSkyboxPipeline();
 
- //   prepareSceneObjectsDescriptor();
- //   prepareOffscreenCommandBuffer();
- //   prepareDeferred();
+    prepareSceneObjectsDescriptor();
+    prepareOffscreenCommandBuffer();
+    prepareDeferred();
 
-	 //ray tracing pipeline
+#endif
+
+#ifdef ONLY_RT
+	// ray tracing pipeline
 	rt_createSema();
 	rt_createUniformBuffers();
 	rt_prepareStorageBuffers();
@@ -215,18 +223,20 @@ void VulkanApp::initVulkan() {
 	rt_prepareCompute();
 	rt_createComputeCommandBuffer();
 	rt_createRaytraceDisplayCommandBuffer();
+#endif
 }
 
 void VulkanApp::mainLoop() {
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
+#ifdef ONLY_RT
+        rt_updateUniformBuffer();
         rt_draw();
-		rt_updateUniformBuffer();
-
-        //draw_new();
-        //updateUniformBuffers();
+#else
+        updateUniformBuffers();
+        draw_new();
+#endif
     }
-
     vkDeviceWaitIdle(device_);
 }
 
@@ -838,38 +848,6 @@ void VulkanApp::loadSingleSceneObjectMesh(AppSceneObject& object_struct) {
             }
         }
     }
-    //for (const auto& shape : shapes) {
-    //    for (const auto& index : shape.mesh.indices) {
-    //        colorRounding += 37;
-    //        Vertex vertex = {};
-
-    //        vertex.pos[0] = attrib.vertices[3 * index.vertex_index + 2];
-    //        vertex.pos[1] = attrib.vertices[3 * index.vertex_index + 1];
-    //        vertex.pos[2] = attrib.vertices[3 * index.vertex_index + 0];
-
-    //        // IMPT
-    //        /*vertex.uv[0] = attrib.texcoords[2 * index.texcoord_index + 0];
-    //        vertex.uv[1] = attrib.texcoords[2 * index.texcoord_index + 1];*/
-
-    //        vertex.uv[0] = 1.0f - attrib.texcoords[2 * index.texcoord_index + 0];
-    //        vertex.uv[1] = 1.0f - attrib.texcoords[2 * index.texcoord_index + 1];
-
-    //        vertex.col[0] = (float)(255 % colorRounding) / (float)255;
-    //        vertex.col[1] = 0.f;
-    //        vertex.col[2] = (float)(255 / colorRounding) / (float)255;
-
-    //        vertex.normal[0] = attrib.normals[3 * index.normal_index + 2];
-    //        vertex.normal[1] = attrib.normals[3 * index.normal_index + 1];
-    //        vertex.normal[2] = attrib.normals[3 * index.normal_index + 0];
-
-    //        vertex.tangent[0] = 0.3f;
-    //        vertex.tangent[1] = 0.6f;
-    //        vertex.tangent[2] = 0.3f;
-
-    //        vertices.push_back(vertex);
-    //        indices.push_back(indices.size());
-    //    }
-    //}
 
     object_struct.vertexCount = static_cast<uint32_t>(vertices.size());
     object_struct.indexCount = static_cast<uint32_t>(indices.size());
@@ -1539,14 +1517,19 @@ void VulkanApp::rt_prepareStorageBuffers() {
         planeStagingBuffer, planeStagingBufferMemory);
 
     void* plane_data;
-    vkMapMemory(device_, planeStagingBufferMemory, 0, planeStorageBufferSize, 0, &plane_data);
+    vkMapMemory(device_, planeStagingBufferMemory, 0, planeStorageBufferSize, 0,
+        &plane_data);
     memcpy(plane_data, planes.data(), (size_t)planeStorageBufferSize);
     vkUnmapMemory(device_, planeStagingBufferMemory);
 
     createBuffer(planeStorageBufferSize,
-        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, compute.myPlaneBuffer.buffer, compute.myPlaneBuffer.deviceMem);
-    copyBuffer(planeStagingBuffer, compute.myPlaneBuffer.buffer, planeStorageBufferSize);
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT
+        | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+        | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        compute.myPlaneBuffer.buffer, compute.myPlaneBuffer.deviceMem);
+    copyBuffer(planeStagingBuffer,
+        compute.myPlaneBuffer.buffer, planeStorageBufferSize);
 
     vkDestroyBuffer(device_, planeStagingBuffer, nullptr);
     vkFreeMemory(device_, planeStagingBufferMemory, nullptr);
@@ -1554,8 +1537,8 @@ void VulkanApp::rt_prepareStorageBuffers() {
 
 void VulkanApp::rt_prepareObjFileBuffer()
 {
-	compute.rt_scene_obj.meshPath = "../../models/maya_cube.obj";
-	rt_loadObj(compute.rt_scene_obj);
+	//compute.rt_scene_obj.meshPath = "../../models/maya_cube.obj";
+	rt_loadObj();
 }
 
 
@@ -1959,13 +1942,14 @@ void VulkanApp::rt_prepareCompute() {
     rt_plane.binding = 3;
     rt_plane.descriptorCount = 1;
 
+    // Binding 4: triangle vertex storage
 	VkDescriptorSetLayoutBinding rt_tri;
 	rt_tri.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	rt_tri.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 	rt_tri.binding = 4;
 	rt_tri.descriptorCount = 1;
 
-	// Binding 1: Uniform buffer block
+	// Binding 5: Uniform buffer block
 	VkDescriptorSetLayoutBinding rt_uniform_geom;
 	rt_uniform_geom.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	rt_uniform_geom.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
@@ -2034,10 +2018,10 @@ void VulkanApp::rt_prepareCompute() {
     rt_storage_plane.buffer = compute.myPlaneBuffer.buffer;
     rt_storage_plane.offset = 0;
     //rt_storage_plane.range = VK_WHOLE_SIZE;
-    rt_storage_plane.range = 6 * sizeof(Plane);
+    rt_storage_plane.range = VK_WHOLE_SIZE;
 
 	VkDescriptorBufferInfo rt_storage_tri{};
-	rt_storage_tri.buffer = compute.rt_scene_obj.buffer;
+	rt_storage_tri.buffer = compute.myTriBuffer.buffer;
 	rt_storage_tri.offset = 0;
 	rt_storage_tri.range = VK_WHOLE_SIZE;
 
@@ -2087,7 +2071,7 @@ void VulkanApp::rt_prepareCompute() {
     rt_uni_storage_plane.pBufferInfo = &rt_storage_plane;
     rt_uni_storage_plane.descriptorCount = 1;
 
-	// Binding 4: Shader storage buffer for the planes
+	// Binding 4: Shader storage buffer for the triangles
 	VkWriteDescriptorSet rt_uni_storage_tri{};
 	rt_uni_storage_tri.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	rt_uni_storage_tri.dstSet = compute.rt_computeDescriptorSet;
@@ -2097,7 +2081,7 @@ void VulkanApp::rt_prepareCompute() {
 	rt_uni_storage_tri.descriptorCount = 1;
 
 
-	// Binding 1: Uniform buffer block
+	// Binding 5: GEOM
 	VkWriteDescriptorSet rt_uni_geom_block{};
 	rt_uni_geom_block.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	rt_uni_geom_block.dstSet = compute.rt_computeDescriptorSet;
@@ -2128,9 +2112,10 @@ void VulkanApp::rt_prepareCompute() {
     computePipelineCreateInfo.stage = loadShader("../../shaders/raytracing.comp.spv",
         VK_SHADER_STAGE_COMPUTE_BIT);
 
-    if (vkCreateComputePipelines(device_, pipelineCache, 1, &computePipelineCreateInfo, nullptr, &compute.rt_computePipine) != VK_SUCCESS) {
+    if (vkCreateComputePipelines(device_, pipelineCache, 1,
+        &computePipelineCreateInfo, nullptr, &compute.rt_computePipine)
+        != VK_SUCCESS) {
         throw std::runtime_error("failed to create compute.rt_computePipine!");
-
     }
 
     //// Separate command pool as queue family for compute may be different than graphics
@@ -2357,9 +2342,6 @@ void VulkanApp::rt_updateUniformBuffer() {
 	memcpy(data, &rt_ubo, sizeof(rt_ubo));
 	vkUnmapMemory(device_, uniformBuffers.rt_compute.deviceMem);
 
-
-
-
 	// scene object positions
 	glm::mat4 modelMat;
 	modelMat = glm::translate(glm::vec3(0.f, 2.f, 0.f));
@@ -2374,9 +2356,9 @@ void VulkanApp::rt_updateUniformBuffer() {
 }
 
 
-void VulkanApp::rt_loadObj(RT_AppSceneObject& object_struct) {
+void VulkanApp::rt_loadObj() {
 
-	std::string file_path = object_struct.meshPath;
+    std::string file_path = "../../models/pipe_low.obj";
 
 	std::vector<Triangle> triangles;
 	std::vector<Vertex> vertices;
@@ -2466,47 +2448,45 @@ void VulkanApp::rt_loadObj(RT_AppSceneObject& object_struct) {
 			}
 
 			Triangle temp;
-			temp.triverts[0] = verts[0];
-			temp.triverts[1] = verts[1];
-			temp.triverts[2] = verts[2];
-			temp.Trinormal = glm::normalize(glm::cross(verts[0].pos - verts[1].pos, verts[0].pos - verts[2].pos));
+            temp.vert_0 = glm::vec4(verts[0].pos, 0.0f);
+            temp.vert_1 = glm::vec4(verts[1].pos, 0.0f);
+            temp.vert_2 = glm::vec4(verts[2].pos, 0.0f);
+            temp.trinormal = glm::vec4(1.0, 0.0, 0.0, 0.0);
 
 			triangles.push_back(temp);
 		}
 	}
 
 
-	// test ============================================================================== // 
-	std::cout << "==============================================================================" << std::endl;
+    //test ++++
+ //   triangles.clear();
+	//Triangle tri_0{};
+	////tri_0.triverts[0] = vert0;
+	////tri_0.triverts[1] = vert1;
+	////tri_0.triverts[2] = vert2;
+ //   // tri_0.triidx = 0.4f;
 
-	std::cout << "Triangles count: " << triangles.size() << std::endl;
-	for (int i = 0; i < triangles.size(); i++)
-	{
-		std::cout << triangles[i].Trinormal[0] << ", " << triangles[i].Trinormal[1] << ", " << triangles[i].Trinormal[2] << std::endl;
-	}
-	std::cout << "==============================================================================" << std::endl;
-	object_struct.triangleCount = triangles.size();
-
-	triangles.clear();
-
-	Vertex vert0{};
-	vert0.pos = glm::vec3(-4, 4, 4);
-
-	Vertex vert1{};
-	vert1.pos = glm::vec3(-2, -2, 2);
-
-	Vertex vert2{};
-	vert2.pos = glm::vec3(3, 3, -3);
-
-	Triangle tri_0{};
-	tri_0.triverts[0] = vert0;
-	tri_0.triverts[1] = vert1;
-	tri_0.triverts[2] = vert2;
-
-	triangles.push_back(tri_0);
+ //   tri_0.testColor[0] = 1.0f;
+ //   tri_0.testColor[1] = 0.0f;
+ //   tri_0.testColor[2] = 1.0f;
+ //   tri_0.trinormal = glm::vec4(0, 1.0f, 1.0f, 1.0f);
+ //   tri_0.vert_0 = glm::vec4(0.2, 0.7, 0.2, 0.0);
+ //   tri_0.vert_1 = glm::vec4(-2, -2, 2, 0.0);
+ //   tri_0.vert_2 = glm::vec4(3, 3, -3, 0.0);
+	//triangles.push_back(tri_0);
 
 	// create vertex buffer for arbitary  model
 	VkDeviceSize triBufferSize = sizeof(Triangle) * triangles.size();
+    triangles;
+    // test ============================================================================== // 
+    std::cout << "==============================================================================" << std::endl;
+
+    std::cout << "Triangles count: " << triangles.size() << std::endl;
+    for (int i = 0; i < triangles.size(); i++)
+    {
+        //std::cout << triangles[i].triverts[0].pos.x << ", " << triangles[i].triverts[0].pos.y << ", " << triangles[i].triverts[0].pos.z << std::endl;
+    }
+    std::cout << "==============================================================================" << std::endl;
 
 	VkBuffer StagingBuffer;
 	VkDeviceMemory StagingBufferMemory;
@@ -2520,15 +2500,15 @@ void VulkanApp::rt_loadObj(RT_AppSceneObject& object_struct) {
 	memcpy(data, triangles.data(), (size_t)triBufferSize);
 	vkUnmapMemory(device_, StagingBufferMemory);
 
-	createBuffer(
-		triBufferSize,
-		VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		object_struct.buffer,
-		object_struct.deviceMem
+    createBuffer(
+        triBufferSize,
+        VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        compute.myTriBuffer.buffer,
+        compute.myTriBuffer.deviceMem
 	);
 
-	copyBuffer(StagingBuffer, object_struct.buffer,
+	copyBuffer(StagingBuffer, compute.myTriBuffer.buffer,
 		triBufferSize);
 
 	vkDestroyBuffer(device_, StagingBuffer, nullptr);

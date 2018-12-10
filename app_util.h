@@ -61,13 +61,9 @@ struct AppSceneObject {
 struct RT_AppSceneObject {
 
 	std::string meshPath;
-	uint32_t triangleCount;
 
-	VkBuffer buffer;
-	VkDeviceMemory deviceMem;
-	VkDescriptorBufferInfo buffInfo;
-
-	VkDescriptorSet descriptorSet;
+	VkBuffer triangleBuffer;
+	VkDeviceMemory trianglerDeviceMem;
 };
 
 struct AppDeferredUniformBufferContent {
@@ -196,17 +192,13 @@ struct Vertex {
 	glm::vec3 tangent;
 };
 
-
-struct BoundingBox
-{
-	glm::vec3 maxB;
-	glm::vec3 minB;
-};
-
 struct Triangle
 {
-	int triidx;
-	Vertex triverts[3];
-	glm::vec3 Trinormal;
-	BoundingBox bbx;
+    
+    glm::vec4 trinormal;
+    glm::vec4 vert_0;
+    glm::vec4 vert_1;
+    glm::vec4 vert_2;
+
+    glm::vec4 testColor;
 };
