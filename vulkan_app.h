@@ -130,6 +130,7 @@ public:
     void run();
 
 private:
+
     GLFWwindow* window_;
 
     VkInstance instance_;
@@ -419,6 +420,11 @@ private:
     // general =================================================
     void draw();
     void updateUniformBuffers();
+    // FPS
+    void showFPS();
+    int frame_count_ = 0;
+    int fps_display_cycle_ = 100;
+    float fps_last_time_ = 0.0f;
     // helper
     void uniformBufferCpy(VkDeviceMemory& device_memory, void* ubo_ptr,
         size_t size);

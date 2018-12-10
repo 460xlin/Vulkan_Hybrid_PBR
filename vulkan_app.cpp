@@ -17,6 +17,7 @@
 // Timers =================================================
 std::chrono::time_point<std::chrono::steady_clock> START_TIME;
 std::chrono::time_point<std::chrono::steady_clock> LAST_RECORD_TIME;
+float FRAME_GAP_TIME;
 
 #include <glm/gtx/intersect.hpp>
 // #define ONLY_RT
@@ -72,7 +73,8 @@ void VulkanApp::initCam() {
     std::cout << sizeof(glm::vec3) << std::endl;
     std::cout << " 3333333"<< std::endl;
     std::cout << sizeof(float) << std::endl;
-
+    firstPersonCam->UpdateEyeAndRef(glm::vec3(2.0873, 3.1675, 4.4433),
+        glm::vec3(-1.1672, -2.5517, -3.08646));
 }
 
 void VulkanApp::mouseDownCallback(GLFWwindow* window, int button, int action, int mods) {
@@ -111,8 +113,8 @@ void VulkanApp::mouseMoveCallback(GLFWwindow* window, double xPosition, double y
 }
 
 void VulkanApp::keyDownCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    float timeGap = GET_CLOBAL_TIME_GAP_SINCE_LAST_RECORD();
-    float movementSpeed = 0.01f;
+    float timeGap = FRAME_GAP_TIME;
+    float movementSpeed = 50.f;
     if (key == GLFW_KEY_W && (action == GLFW_KEY_LAST || GLFW_PRESS)) {
         // go forward
         firstPersonCam->TranslateAlongLook(timeGap * movementSpeed);
@@ -137,6 +139,12 @@ void VulkanApp::keyDownCallback(GLFWwindow* window, int key, int scancode, int a
         // go up
         firstPersonCam->TranslateAlongUp(timeGap * movementSpeed);
     }
+    else if (key == GLFW_KEY_C && action == GLFW_PRESS) {
+        std::cout << "eye: ";
+        apputil::printVec3(firstPersonCam->eye);
+        std::cout << "ref: ";
+        apputil::printVec3(firstPersonCam->ref);
+    }
 }
 
 
@@ -160,8 +168,8 @@ VulkanApp::VulkanApp() {}
 void VulkanApp::run() {
     initWindow();
     initCam();
-    INIT_GLOBAL_TIME();
     initVulkan();
+    INIT_GLOBAL_TIME();
     mainLoop();
     cleanup();
 }
@@ -229,11 +237,14 @@ void VulkanApp::initVulkan() {
 void VulkanApp::mainLoop() {
     while (!glfwWindowShouldClose(window_)) {
         glfwPollEvents();
+        FRAME_GAP_TIME = GET_CLOBAL_TIME_GAP_SINCE_LAST_RECORD();
+        SET_GLOBAL_RECORD_TIME();
 #ifdef ONLY_RT
         rt_updateUniformBuffer();
         rt_draw();
 #else
         updateUniformBuffers();
+        showFPS();
         draw();
 #endif
     }
@@ -2975,10 +2986,10 @@ void VulkanApp::prepareSceneObjectsData() {
     AppSceneObject sphere4{};
     sphere4.meshPath = "../../models/substance_sphere.obj";
     sphere4.albedo.path =
-        "../../textures/substance_grid/albedo.png";
-    sphere4.normal.path = "../../textures/substance_grid/normal.png";
+        "../../textures/substance_ruststeal/albedo.png";
+    sphere4.normal.path = "../../textures/substance_ruststeal/normal.png";
     sphere4.mrao.path =
-        "../../textures/substance_grid/mrao.png";
+        "../../textures/substance_ruststeal/mrao.png";
     sphere4.uniformBufferAndContent.content.modelMatrix =
         glm::translate(glm::vec3(-1.f, 0.f, 1.f));
 
@@ -4399,6 +4410,7 @@ void VulkanApp::draw() {
 
 void VulkanApp::updateUniformBuffers() {
     float time = GET_CLOBAL_TIME_GAP_SINCE_START();
+    
 
     // offscreen camera
     auto& ocs_ubo = offscreen_.uniformBufferAndContent.content;
@@ -4500,6 +4512,17 @@ glm::mat4 VulkanApp::getSkyboxModelMat() {
     modelMat = glm::rotate(modelMat, forward.x,
         glm::vec3(0.0f, 1.0f, 0.0f));
     return modelMat;
+}
+
+void VulkanApp::showFPS() {
+    ++frame_count_;
+    frame_count_ %= fps_display_cycle_;
+    if (frame_count_ == 0) {
+        float globalTime = GET_CLOBAL_TIME_GAP_SINCE_START();
+        float time = globalTime - fps_last_time_;
+        fps_last_time_ = globalTime;
+        std::cout << "FPS: " << float(fps_display_cycle_) / time << std::endl;
+    }
 }
 
 

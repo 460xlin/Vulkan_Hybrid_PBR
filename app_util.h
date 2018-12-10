@@ -3,6 +3,7 @@
 #include <GLFW/glfw3.h>
 #include <string>
 #include <glm/glm.hpp>
+#define GPU_INSTANCING
 
 struct AppUniformBuffer {
     VkBuffer buffer;
@@ -93,6 +94,9 @@ struct AppDeferredPipelineAssets {
 struct AppOffscreenUniformBufferContent {
     glm::mat4 projMatrix;
     glm::mat4 viewMatrix;
+#ifdef GPU_INSTANCING
+    glm::mat4 instancingModelMatrix;
+#endif
 };
 
 struct AppOffscreenPipelineAssets {

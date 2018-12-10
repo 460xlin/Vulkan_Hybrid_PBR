@@ -3,6 +3,15 @@
 #extension GL_ARB_separate_shader_objects : enable
 #extension GL_ARB_shading_language_420pack : enable
 
+// #define SHOW_ALBEDO
+// #define SHOW_METALLIC
+// #define SHOW_ROUGHNESS
+// #define SHOW_AO
+// #define SHOW_NORMAL
+// #define SHOW_POSITION
+// #define SHOW_MRAO
+
+
 layout (binding = 0) uniform UBO 
 {
 	vec3 eyePos;
@@ -102,7 +111,7 @@ vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection)
     // vec3 diffuseLight = SRGBtoLINEAR(texture(samplerCubemap, -n)).rgb;
     // vec3 specularLight = SRGBtoLINEAR(texture(samplerCubemap, -reflection)).rgb;
 
-	vec3 diffuseLight = CubeMapToneAndGamma(texture(samplerCubemap, -n, 7).rgb);
+	vec3 diffuseLight = CubeMapToneAndGamma(texture(samplerCubemap, -n, lod).rgb);
     vec3 specularLight = CubeMapToneAndGamma(texture(samplerCubemap, -reflection).rgb);
 
     vec3 diffuse = diffuseLight * pbrInputs.diffuseColor;
@@ -160,7 +169,21 @@ void main() {
 	vec4 fragPosV4 = texture(samplerPosition, inUV);
 	vec3 fragColor = texture(samplerAlbedo, inUV).rgb;
 	if (fragPosV4.w < 1.0f) {
-		outFragColor = vec4(fragColor, 1.0f);
+#ifndef SHOW_AO
+#ifndef SHOW_METALLIC
+#ifndef SHOW_ROUGHNESS
+#ifndef SHOW_NORMAL
+#ifndef SHOW_POSITION
+#ifndef SHOW_MRAO
+        outFragColor = vec4(fragColor, 1.0f);
+        return;
+#endif
+#endif
+#endif
+#endif
+#endif
+#endif
+		outFragColor = vec4(1.0f);
 		return;
 	}
 	vec3 fragPos = vec3(fragPosV4.x, fragPosV4.y, fragPosV4.z);
@@ -247,13 +270,36 @@ void main() {
     // color = mix(color, specContrib, u_ScaleFGDSpec.w);
 
     // color = mix(color, diffuseContrib, u_ScaleDiffBaseMR.x);
-    color = mix(color, baseColor.rgb, 0.3f);
+    // color = mix(color, baseColor.rgb, 0.3f);
     // color = mix(color, vec3(metallic), u_ScaleDiffBaseMR.z);
     // color = mix(color, vec3(perceptualRoughness), u_ScaleDiffBaseMR.w);
 	outFragColor = vec4(color, 1.f);
 	// outFragColor = vec4(fragPos, 1.f);
+#ifdef SHOW_ALBEDO
+	outFragColor = texture(samplerAlbedo, inUV);
+#endif
 
+#ifdef SHOW_METALLIC
+	outFragColor = vec4(vec3(mrao.x), 1.f);
+#endif
 
-	// outFragColor = texture(samplerAlbedo, inUV);
-	// outFragColor = vec4(IBLContribution, 1.f);
+#ifdef SHOW_ROUGHNESS
+	outFragColor = vec4(vec3(mrao.y), 1.f);
+#endif
+
+#ifdef SHOW_AO
+	outFragColor = vec4(vec3(mrao.z), 1.f);
+#endif
+
+#ifdef SHOW_NORMAL
+    outFragColor = vec4(n, 1.f);
+#endif
+
+#ifdef SHOW_POSITION
+    outFragColor = vec4(fragPos, 1.f);
+#endif
+
+#ifdef SHOW_MRAO
+    outFragColor = vec4(mrao, 1.f);
+#endif
 }

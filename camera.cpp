@@ -44,6 +44,13 @@ Camera::Camera(const Camera &c) :
     H(c.H)
 {}
 
+void Camera::UpdateEyeAndRef(const glm::vec3& eye_in,
+    const glm::vec3& ref_in) {
+    eye = eye_in;
+    ref = ref_in;
+    RecomputeAttributes();
+}
+
 
 void Camera::RecomputeAttributes()
 {

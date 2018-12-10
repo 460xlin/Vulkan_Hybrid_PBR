@@ -11,7 +11,9 @@ public:
     Camera(unsigned int w, unsigned int h);
     Camera(unsigned int w, unsigned int h, const glm::vec3 &e, const glm::vec3 &r, const glm::vec3 &worldUp);
     Camera(const Camera &c);
-
+    void UpdateEyeAndRef(
+        const glm::vec3& ref_in,
+        const glm::vec3& eye_in);
     float fovy;
     unsigned int width, height;  // Screen dimensions
     float near_clip;  // Near clip plane distance
