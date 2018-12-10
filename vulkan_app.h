@@ -303,17 +303,17 @@ private:
 	struct {
 		MyUniformBuffer rt_compute;
 		MyUniformBuffer rt_geom;
-	} uniformBuffers;
+	} rt_uniformBuffers;
 	
 	struct {
       //  VkDescriptorSet descriptorSetPreCompute;	// Raytraced image display shader bindings before compute shader image manipulation
       //  VkDescriptorSet descriptorSet;				// Raytraced image display shader bindings after compute shader image manipulation
-        VkDescriptorSetLayout rt_descriptorSetLayout;
-        VkDescriptorSet rt_descriptorSet;
-        VkPipelineLayout rt_raytracePipelineLayout;
-        VkPipeline rt_raytracePipeline;
-        VkRenderPass rt_rayTraceRenderPass;
-    } graphics;
+        VkDescriptorSetLayout descriptorSetLayout;
+        VkDescriptorSet descriptorSet;
+        VkPipelineLayout pipelineLayout;
+        VkPipeline pipeline;
+        VkRenderPass renderPass;
+    } graphics_;
 
     struct {
         struct rayTracingSceneObjectBuffer
@@ -333,7 +333,7 @@ private:
         VkFence rt_fence;
         VkCommandBuffer rt_computeCmdBuffer = VK_NULL_HANDLE;
 
-    } compute;
+    } compute_;
 
     // offscreen =================================================
     AppOffscreenPipelineAssets offscreen_;
@@ -417,7 +417,7 @@ private:
     static void keyDownCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 
     // general =================================================
-    void draw_new();
+    void draw();
     void updateUniformBuffers();
     // helper
     void uniformBufferCpy(VkDeviceMemory& device_memory, void* ubo_ptr,

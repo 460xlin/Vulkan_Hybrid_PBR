@@ -19,7 +19,7 @@ std::chrono::time_point<std::chrono::steady_clock> START_TIME;
 std::chrono::time_point<std::chrono::steady_clock> LAST_RECORD_TIME;
 
 #include <glm/gtx/intersect.hpp>
-#define ONLY_RT
+// #define ONLY_RT
 
 
 void INIT_GLOBAL_TIME() {
@@ -234,7 +234,7 @@ void VulkanApp::mainLoop() {
         rt_draw();
 #else
         updateUniformBuffers();
-        draw_new();
+        draw();
 #endif
     }
     vkDeviceWaitIdle(device_);
@@ -1454,13 +1454,13 @@ void VulkanApp::rt_createUniformBuffers() {
 	VkDeviceSize rtBufferSize = sizeof(RTUniformBufferObject);
 	createBuffer(rtBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		uniformBuffers.rt_compute.buffer, uniformBuffers.rt_compute.deviceMem
+		rt_uniformBuffers.rt_compute.buffer, rt_uniformBuffers.rt_compute.deviceMem
 	);
 
 	VkDeviceSize rtGeomSize = sizeof(RT_GEOM);
 	createBuffer(rtGeomSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		uniformBuffers.rt_geom.buffer, uniformBuffers.rt_geom.deviceMem
+		rt_uniformBuffers.rt_geom.buffer, rt_uniformBuffers.rt_geom.deviceMem
 	);
 }
 
@@ -1488,10 +1488,10 @@ void VulkanApp::rt_prepareStorageBuffers() {
 		sphereStorageBufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-		compute.mySphereBuffer.buffer,
-		compute.mySphereBuffer.deviceMem
+		compute_.mySphereBuffer.buffer,
+		compute_.mySphereBuffer.deviceMem
 	);
-    copyBuffer(sphereStagingBuffer, compute.mySphereBuffer.buffer, sphereStorageBufferSize);
+    copyBuffer(sphereStagingBuffer, compute_.mySphereBuffer.buffer, sphereStorageBufferSize);
 
     vkDestroyBuffer(device_, sphereStagingBuffer, nullptr);
     vkFreeMemory(device_, sphereStagingBufferMemory, nullptr);
@@ -1527,9 +1527,9 @@ void VulkanApp::rt_prepareStorageBuffers() {
         | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
         | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        compute.myPlaneBuffer.buffer, compute.myPlaneBuffer.deviceMem);
+        compute_.myPlaneBuffer.buffer, compute_.myPlaneBuffer.deviceMem);
     copyBuffer(planeStagingBuffer,
-        compute.myPlaneBuffer.buffer, planeStorageBufferSize);
+        compute_.myPlaneBuffer.buffer, planeStorageBufferSize);
 
     vkDestroyBuffer(device_, planeStagingBuffer, nullptr);
     vkFreeMemory(device_, planeStagingBufferMemory, nullptr);
@@ -1615,13 +1615,10 @@ void VulkanApp::rt_graphics_setupDescriptorSetLayout() {
     descriptorLayout.bindingCount = setLayoutBindings.size();
 
     // here
-    if (vkCreateDescriptorSetLayout(device_, &descriptorLayout, nullptr, &graphics.rt_descriptorSetLayout) != VK_SUCCESS)
+    if (vkCreateDescriptorSetLayout(device_, &descriptorLayout, nullptr, &graphics_.descriptorSetLayout) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to create descriptorlayout for rt!");
     }
-
-
-   
 }
 
 void VulkanApp::rt_graphics_setupDescriptorSet()
@@ -1629,10 +1626,10 @@ void VulkanApp::rt_graphics_setupDescriptorSet()
 	VkDescriptorSetAllocateInfo allocInfo{};
 	allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	allocInfo.descriptorPool = descriptor_pool_;
-	allocInfo.pSetLayouts = &graphics.rt_descriptorSetLayout;
+	allocInfo.pSetLayouts = &graphics_.descriptorSetLayout;
 	// allocInfo.pSetLayouts = &descriptorSetLayout;
 	allocInfo.descriptorSetCount = 1;
-	if (vkAllocateDescriptorSets(device_, &allocInfo, &graphics.rt_descriptorSet) != VK_SUCCESS)
+	if (vkAllocateDescriptorSets(device_, &allocInfo, &graphics_.descriptorSet) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create rt_descriptorSet for rt!");
 	}
@@ -1647,7 +1644,7 @@ void VulkanApp::rt_graphics_setupDescriptorSet()
 	// Binding 0 : Fragment shader texture sampler
 	VkWriteDescriptorSet writeDescriptorSet{};
 	writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	writeDescriptorSet.dstSet = graphics.rt_descriptorSet;
+	writeDescriptorSet.dstSet = graphics_.descriptorSet;
 	writeDescriptorSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	writeDescriptorSet.dstBinding = 0;
 	writeDescriptorSet.pImageInfo = &rt_imageInfo;
@@ -1667,9 +1664,9 @@ void VulkanApp::rt_createPipelineLayout()
 	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{};
 	pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	pipelineLayoutCreateInfo.setLayoutCount = 1;
-	pipelineLayoutCreateInfo.pSetLayouts = &graphics.rt_descriptorSetLayout;
+	pipelineLayoutCreateInfo.pSetLayouts = &graphics_.descriptorSetLayout;
 
-	if (vkCreatePipelineLayout(device_, &pipelineLayoutCreateInfo, nullptr, &graphics.rt_raytracePipelineLayout) != VK_SUCCESS)
+	if (vkCreatePipelineLayout(device_, &pipelineLayoutCreateInfo, nullptr, &graphics_.pipelineLayout) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create rt_raytracePipelineLayout for rt!");
 	}
@@ -1759,7 +1756,7 @@ void VulkanApp::rt_createRenderpass()
 	renderPassInfo.pDependencies = dependencies.data();
 
 	if (vkCreateRenderPass(device_, &renderPassInfo, nullptr,
-		&graphics.rt_rayTraceRenderPass) != VK_SUCCESS) {
+		&graphics_.renderPass) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create graphics.rt_rayTraceRenderPass!");
 	}
 }
@@ -1778,7 +1775,7 @@ void VulkanApp::rt_creatFramebuffer()
 		VkFramebufferCreateInfo framebufferInfo = {};
 		framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		// IMPT
-		framebufferInfo.renderPass = graphics.rt_rayTraceRenderPass;
+		framebufferInfo.renderPass = graphics_.renderPass;
 		framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
 		framebufferInfo.pAttachments = attachments.data();
 		framebufferInfo.width = swapchain_extent_.width;
@@ -1874,8 +1871,8 @@ void VulkanApp::rt_createPipeline()
 
 	VkGraphicsPipelineCreateInfo pipelineCreateInfo{};
 	pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-	pipelineCreateInfo.layout = graphics.rt_raytracePipelineLayout;
-	pipelineCreateInfo.renderPass = graphics.rt_rayTraceRenderPass;
+	pipelineCreateInfo.layout = graphics_.pipelineLayout;
+	pipelineCreateInfo.renderPass = graphics_.renderPass;
 	pipelineCreateInfo.flags = 0;
 	pipelineCreateInfo.basePipelineIndex = -1;
 	pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
@@ -1891,7 +1888,7 @@ void VulkanApp::rt_createPipeline()
 	pipelineCreateInfo.pVertexInputState = &emptyInputState;
 
 	if (vkCreateGraphicsPipelines(device_, pipelineCache, 1,
-		&pipelineCreateInfo, nullptr, &graphics.rt_raytracePipeline)
+		&pipelineCreateInfo, nullptr, &graphics_.pipeline)
 		!= VK_SUCCESS) {
 
 		throw std::runtime_error("failed to create offscreen_.pipeline");
@@ -1912,7 +1909,7 @@ void VulkanApp::rt_prepareCompute() {
     queueCreateInfo.queueCount = 1;
     queueCreateInfo.queueFamilyIndex = fi.computeFamily.value();
 
-    vkGetDeviceQueue(device_, fi.computeFamily.value(), 0, &compute.rt_computeQueue);
+    vkGetDeviceQueue(device_, fi.computeFamily.value(), 0, &compute_.rt_computeQueue);
 
     // Binding 0: Storage image (raytraced output)
     VkDescriptorSetLayoutBinding rt_storage;
@@ -1965,7 +1962,7 @@ void VulkanApp::rt_prepareCompute() {
     descriptorLayout.pBindings = setLayoutBindings.data();
     descriptorLayout.bindingCount = setLayoutBindings.size();
 
-    if (vkCreateDescriptorSetLayout(device_, &descriptorLayout, nullptr, &compute.rt_computeDescriptorSetLayout) != VK_SUCCESS)
+    if (vkCreateDescriptorSetLayout(device_, &descriptorLayout, nullptr, &compute_.rt_computeDescriptorSetLayout) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to create rt_computeDescriptorSetLayout!");
     }
@@ -1973,9 +1970,9 @@ void VulkanApp::rt_prepareCompute() {
     VkPipelineLayoutCreateInfo pPipelineLayoutCreateInfo{};
     pPipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pPipelineLayoutCreateInfo.setLayoutCount = 1;
-    pPipelineLayoutCreateInfo.pSetLayouts = &compute.rt_computeDescriptorSetLayout;
+    pPipelineLayoutCreateInfo.pSetLayouts = &compute_.rt_computeDescriptorSetLayout;
 
-    if (vkCreatePipelineLayout(device_, &pPipelineLayoutCreateInfo, nullptr, &compute.rt_computePipelineLayout) != VK_SUCCESS)
+    if (vkCreatePipelineLayout(device_, &pPipelineLayoutCreateInfo, nullptr, &compute_.rt_computePipelineLayout) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to create rt_computePipelineLayout!");
     }
@@ -1983,10 +1980,10 @@ void VulkanApp::rt_prepareCompute() {
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = descriptor_pool_;
-    allocInfo.pSetLayouts = &compute.rt_computeDescriptorSetLayout;
+    allocInfo.pSetLayouts = &compute_.rt_computeDescriptorSetLayout;
     allocInfo.descriptorSetCount = 1;
 
-    if (vkAllocateDescriptorSets(device_, &allocInfo, &compute.rt_computeDescriptorSet) != VK_SUCCESS)
+    if (vkAllocateDescriptorSets(device_, &allocInfo, &compute_.rt_computeDescriptorSet) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to create rt_computeDescriptorSet!");
     }
@@ -1999,46 +1996,46 @@ void VulkanApp::rt_prepareCompute() {
 
     // to check out whether offset is 0;
     VkDescriptorBufferInfo rt_uniform_bufferInfo{};
-    rt_uniform_bufferInfo.buffer = uniformBuffers.rt_compute.buffer;
+    rt_uniform_bufferInfo.buffer = rt_uniformBuffers.rt_compute.buffer;
     rt_uniform_bufferInfo.offset = 0;
     rt_uniform_bufferInfo.range = sizeof(RTUniformBufferObject);
 
     // update desbuffinfo for computer's union buffer
-    uniformBuffers.rt_compute.desBuffInfo = rt_uniform_bufferInfo;
+    rt_uniformBuffers.rt_compute.desBuffInfo = rt_uniform_bufferInfo;
 
 
     VkDescriptorBufferInfo rt_storage_sphere{};
-    rt_storage_sphere.buffer = compute.mySphereBuffer.buffer;
+    rt_storage_sphere.buffer = compute_.mySphereBuffer.buffer;
     rt_storage_sphere.offset = 0;
     // todo 
     rt_storage_sphere.range = VK_WHOLE_SIZE;
     //rt_storage_sphere.range = 3 * sizeof(Sphere);
 
     VkDescriptorBufferInfo rt_storage_plane{};
-    rt_storage_plane.buffer = compute.myPlaneBuffer.buffer;
+    rt_storage_plane.buffer = compute_.myPlaneBuffer.buffer;
     rt_storage_plane.offset = 0;
     //rt_storage_plane.range = VK_WHOLE_SIZE;
     rt_storage_plane.range = VK_WHOLE_SIZE;
 
 	VkDescriptorBufferInfo rt_storage_tri{};
-	rt_storage_tri.buffer = compute.myTriBuffer.buffer;
+	rt_storage_tri.buffer = compute_.myTriBuffer.buffer;
 	rt_storage_tri.offset = 0;
 	rt_storage_tri.range = VK_WHOLE_SIZE;
 
 	VkDescriptorBufferInfo rt_uniform_geom_bufferInfo{};
-	rt_uniform_geom_bufferInfo.buffer = uniformBuffers.rt_geom.buffer;
+	rt_uniform_geom_bufferInfo.buffer = rt_uniformBuffers.rt_geom.buffer;
 	rt_uniform_geom_bufferInfo.offset = 0;
 	rt_uniform_geom_bufferInfo.range = sizeof(RT_GEOM);
 
 	// update desbuffinfo for computer's union buffer
-	uniformBuffers.rt_geom.desBuffInfo = rt_uniform_geom_bufferInfo;
+	rt_uniformBuffers.rt_geom.desBuffInfo = rt_uniform_geom_bufferInfo;
 
 
 
     // Binding 0: Output storage image
     VkWriteDescriptorSet rt_out_storage{};
     rt_out_storage.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    rt_out_storage.dstSet = compute.rt_computeDescriptorSet;
+    rt_out_storage.dstSet = compute_.rt_computeDescriptorSet;
     rt_out_storage.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     rt_out_storage.dstBinding = 0;
     rt_out_storage.pImageInfo = &rt_out_storage_imageInfo;
@@ -2047,16 +2044,16 @@ void VulkanApp::rt_prepareCompute() {
     // Binding 1: Uniform buffer block
     VkWriteDescriptorSet rt_uni_block{};
     rt_uni_block.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    rt_uni_block.dstSet = compute.rt_computeDescriptorSet;
+    rt_uni_block.dstSet = compute_.rt_computeDescriptorSet;
     rt_uni_block.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     rt_uni_block.dstBinding = 1;
-    rt_uni_block.pBufferInfo = &uniformBuffers.rt_compute.desBuffInfo;
+    rt_uni_block.pBufferInfo = &rt_uniformBuffers.rt_compute.desBuffInfo;
     rt_uni_block.descriptorCount = 1;
 
     // Binding 2: Shader storage buffer for the spheres
     VkWriteDescriptorSet rt_uni_storage_sphere{};
     rt_uni_storage_sphere.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    rt_uni_storage_sphere.dstSet = compute.rt_computeDescriptorSet;
+    rt_uni_storage_sphere.dstSet = compute_.rt_computeDescriptorSet;
     rt_uni_storage_sphere.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     rt_uni_storage_sphere.dstBinding = 2;
     rt_uni_storage_sphere.pBufferInfo = &rt_storage_sphere;
@@ -2065,7 +2062,7 @@ void VulkanApp::rt_prepareCompute() {
     // Binding 3: Shader storage buffer for the planes
     VkWriteDescriptorSet rt_uni_storage_plane{};
     rt_uni_storage_plane.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    rt_uni_storage_plane.dstSet = compute.rt_computeDescriptorSet;
+    rt_uni_storage_plane.dstSet = compute_.rt_computeDescriptorSet;
     rt_uni_storage_plane.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     rt_uni_storage_plane.dstBinding = 3;
     rt_uni_storage_plane.pBufferInfo = &rt_storage_plane;
@@ -2074,7 +2071,7 @@ void VulkanApp::rt_prepareCompute() {
 	// Binding 4: Shader storage buffer for the triangles
 	VkWriteDescriptorSet rt_uni_storage_tri{};
 	rt_uni_storage_tri.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	rt_uni_storage_tri.dstSet = compute.rt_computeDescriptorSet;
+	rt_uni_storage_tri.dstSet = compute_.rt_computeDescriptorSet;
 	rt_uni_storage_tri.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	rt_uni_storage_tri.dstBinding = 4;
 	rt_uni_storage_tri.pBufferInfo = &rt_storage_tri;
@@ -2084,10 +2081,10 @@ void VulkanApp::rt_prepareCompute() {
 	// Binding 5: GEOM
 	VkWriteDescriptorSet rt_uni_geom_block{};
 	rt_uni_geom_block.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	rt_uni_geom_block.dstSet = compute.rt_computeDescriptorSet;
+	rt_uni_geom_block.dstSet = compute_.rt_computeDescriptorSet;
 	rt_uni_geom_block.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	rt_uni_geom_block.dstBinding = 5;
-	rt_uni_geom_block.pBufferInfo = &uniformBuffers.rt_geom.desBuffInfo;
+	rt_uni_geom_block.pBufferInfo = &rt_uniformBuffers.rt_geom.desBuffInfo;
 	rt_uni_geom_block.descriptorCount = 1;
 
 
@@ -2107,13 +2104,13 @@ void VulkanApp::rt_prepareCompute() {
     // Create compute shader pipelines
     VkComputePipelineCreateInfo computePipelineCreateInfo{};
     computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-    computePipelineCreateInfo.layout = compute.rt_computePipelineLayout;
+    computePipelineCreateInfo.layout = compute_.rt_computePipelineLayout;
     computePipelineCreateInfo.flags = 0;
     computePipelineCreateInfo.stage = loadShader("../../shaders/raytracing.comp.spv",
         VK_SHADER_STAGE_COMPUTE_BIT);
 
     if (vkCreateComputePipelines(device_, pipelineCache, 1,
-        &computePipelineCreateInfo, nullptr, &compute.rt_computePipine)
+        &computePipelineCreateInfo, nullptr, &compute_.rt_computePipine)
         != VK_SUCCESS) {
         throw std::runtime_error("failed to create compute.rt_computePipine!");
     }
@@ -2138,7 +2135,7 @@ void VulkanApp::rt_createComputeCommandBuffer() {
 	cmdBufAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	cmdBufAllocateInfo.commandBufferCount = 1;
 
-	if (vkAllocateCommandBuffers(device_, &cmdBufAllocateInfo, &compute.rt_computeCmdBuffer) != VK_SUCCESS)
+	if (vkAllocateCommandBuffers(device_, &cmdBufAllocateInfo, &compute_.rt_computeCmdBuffer) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to allocate rt_computeCmdBuffer");
 	}
@@ -2147,7 +2144,7 @@ void VulkanApp::rt_createComputeCommandBuffer() {
 	fenceCreateInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	fenceCreateInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-	if (vkCreateFence(device_, &fenceCreateInfo, nullptr, &compute.rt_fence)) {
+	if (vkCreateFence(device_, &fenceCreateInfo, nullptr, &compute_.rt_fence)) {
 		throw std::runtime_error("failed to create compute.rt_fence!");
 	}
 
@@ -2156,21 +2153,21 @@ void VulkanApp::rt_createComputeCommandBuffer() {
 	cmdBufBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	cmdBufBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 
-	if (vkBeginCommandBuffer(compute.rt_computeCmdBuffer, &cmdBufBeginInfo) != VK_SUCCESS) {
+	if (vkBeginCommandBuffer(compute_.rt_computeCmdBuffer, &cmdBufBeginInfo) != VK_SUCCESS) {
 		throw std::runtime_error("failed to begin rt_computeCmdBuffer");
 	}
 
-	vkCmdBindPipeline(compute.rt_computeCmdBuffer,
+	vkCmdBindPipeline(compute_.rt_computeCmdBuffer,
 		VK_PIPELINE_BIND_POINT_COMPUTE,
-		compute.rt_computePipine);
-	vkCmdBindDescriptorSets(compute.rt_computeCmdBuffer,
-		VK_PIPELINE_BIND_POINT_COMPUTE, compute.rt_computePipelineLayout,
-		0, 1, &compute.rt_computeDescriptorSet, 0, 0);
+		compute_.rt_computePipine);
+	vkCmdBindDescriptorSets(compute_.rt_computeCmdBuffer,
+		VK_PIPELINE_BIND_POINT_COMPUTE, compute_.rt_computePipelineLayout,
+		0, 1, &compute_.rt_computeDescriptorSet, 0, 0);
 
 	// TODO why 16
-	vkCmdDispatch(compute.rt_computeCmdBuffer, swapchain_extent_.width / 16, swapchain_extent_.height / 16, 1);
+	vkCmdDispatch(compute_.rt_computeCmdBuffer, swapchain_extent_.width / 16, swapchain_extent_.height / 16, 1);
 
-	vkEndCommandBuffer(compute.rt_computeCmdBuffer);
+	vkEndCommandBuffer(compute_.rt_computeCmdBuffer);
 }
 
 void VulkanApp::rt_createRaytraceDisplayCommandBuffer() {
@@ -2198,7 +2195,7 @@ void VulkanApp::rt_createRaytraceDisplayCommandBuffer() {
 
         VkRenderPassBeginInfo renderPassBeginInfo{};
         renderPassBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassBeginInfo.renderPass = graphics.rt_rayTraceRenderPass;
+        renderPassBeginInfo.renderPass = graphics_.renderPass;
         renderPassBeginInfo.renderArea.offset.x = 0;
         renderPassBeginInfo.renderArea.offset.y = 0;
         renderPassBeginInfo.renderArea.extent.width = swapchain_extent_.width;
@@ -2249,8 +2246,8 @@ void VulkanApp::rt_createRaytraceDisplayCommandBuffer() {
 
         // Display ray traced image generated by compute shader as a full screen quad
         // Quad vertices are generated in the vertex shader
-        vkCmdBindDescriptorSets(rt_drawCommandBuffer[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphics.rt_raytracePipelineLayout, 0, 1, &graphics.rt_descriptorSet, 0, NULL);
-        vkCmdBindPipeline(rt_drawCommandBuffer[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphics.rt_raytracePipeline);
+        vkCmdBindDescriptorSets(rt_drawCommandBuffer[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_.pipelineLayout, 0, 1, &graphics_.descriptorSet, 0, NULL);
+        vkCmdBindPipeline(rt_drawCommandBuffer[i], VK_PIPELINE_BIND_POINT_GRAPHICS, graphics_.pipeline);
         vkCmdDraw(rt_drawCommandBuffer[i], 3, 1, 0, 0);
 
         vkCmdEndRenderPass(rt_drawCommandBuffer[i]);
@@ -2281,7 +2278,7 @@ void VulkanApp::rt_draw() {
     mySubmitInfo.pWaitSemaphores = waitSemaphores;
     mySubmitInfo.pSignalSemaphores = &rt_sema;
     mySubmitInfo.commandBufferCount = 1;
-    mySubmitInfo.pCommandBuffers = &compute.rt_computeCmdBuffer;
+    mySubmitInfo.pCommandBuffers = &compute_.rt_computeCmdBuffer;
 
     // Command buffer to be sumitted to the queue
     if (vkQueueSubmit(queue_, 1, &mySubmitInfo, VK_NULL_HANDLE) != VK_SUCCESS) {
@@ -2338,9 +2335,9 @@ void VulkanApp::rt_updateUniformBuffer() {
 	rt_ubo.camera.pos = glm::vec3(camDelta);
 
 	void* data;
-	vkMapMemory(device_, uniformBuffers.rt_compute.deviceMem, 0, sizeof(rt_ubo), 0, &data);
+	vkMapMemory(device_, rt_uniformBuffers.rt_compute.deviceMem, 0, sizeof(rt_ubo), 0, &data);
 	memcpy(data, &rt_ubo, sizeof(rt_ubo));
-	vkUnmapMemory(device_, uniformBuffers.rt_compute.deviceMem);
+	vkUnmapMemory(device_, rt_uniformBuffers.rt_compute.deviceMem);
 
 	// scene object positions
 	glm::mat4 modelMat;
@@ -2350,9 +2347,9 @@ void VulkanApp::rt_updateUniformBuffer() {
 	rt_g.transform = modelMat;
 	rt_g.inverseTransform = glm::inverse(modelMat);
 	void* geom_data;
-	vkMapMemory(device_, uniformBuffers.rt_geom.deviceMem, 0, sizeof(rt_g), 0, &geom_data);
+	vkMapMemory(device_, rt_uniformBuffers.rt_geom.deviceMem, 0, sizeof(rt_g), 0, &geom_data);
 	memcpy(geom_data, &rt_g, sizeof(rt_g));
-	vkUnmapMemory(device_, uniformBuffers.rt_geom.deviceMem);
+	vkUnmapMemory(device_, rt_uniformBuffers.rt_geom.deviceMem);
 }
 
 
@@ -2368,8 +2365,6 @@ void VulkanApp::rt_loadObj() {
 	std::vector<tinyobj::shape_t> shapes;
 	std::vector<tinyobj::material_t> materials;
 	std::string warn, err;
-
-
 
 	if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, file_path.c_str())) {
 		throw std::runtime_error(warn + err);
@@ -2504,11 +2499,11 @@ void VulkanApp::rt_loadObj() {
         triBufferSize,
         VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        compute.myTriBuffer.buffer,
-        compute.myTriBuffer.deviceMem
+        compute_.myTriBuffer.buffer,
+        compute_.myTriBuffer.deviceMem
 	);
 
-	copyBuffer(StagingBuffer, compute.myTriBuffer.buffer,
+	copyBuffer(StagingBuffer, compute_.myTriBuffer.buffer,
 		triBufferSize);
 
 	vkDestroyBuffer(device_, StagingBuffer, nullptr);
@@ -2954,6 +2949,8 @@ void VulkanApp::prepareSceneObjectsData() {
     sphere1.normal.path = "../../textures/substance_bronze/normal.png";
     sphere1.mrao.path =
         "../../textures/substance_bronze/mrao.png";
+    sphere1.uniformBufferAndContent.content.modelMatrix =
+        glm::translate(glm::vec3(-1.f, 0.f, -1.f));
     
     AppSceneObject sphere2{};
     sphere2.meshPath = "../../models/substance_sphere.obj";
@@ -2962,6 +2959,8 @@ void VulkanApp::prepareSceneObjectsData() {
     sphere2.normal.path = "../../textures/substance_machinery/normal.png";
     sphere2.mrao.path =
         "../../textures/substance_machinery/mrao.png";
+    sphere2.uniformBufferAndContent.content.modelMatrix =
+        glm::translate(glm::vec3(1.f, 0.f, -1.f));
 
     AppSceneObject sphere3{};
     sphere3.meshPath = "../../models/substance_sphere.obj";
@@ -2970,10 +2969,36 @@ void VulkanApp::prepareSceneObjectsData() {
     sphere3.normal.path = "../../textures/substance_steal/normal.png";
     sphere3.mrao.path =
         "../../textures/substance_steal/mrao.png";
+    sphere3.uniformBufferAndContent.content.modelMatrix =
+        glm::translate(glm::vec3(1.f, 0.f, 1.f));
+
+    AppSceneObject sphere4{};
+    sphere4.meshPath = "../../models/substance_sphere.obj";
+    sphere4.albedo.path =
+        "../../textures/substance_grid/albedo.png";
+    sphere4.normal.path = "../../textures/substance_grid/normal.png";
+    sphere4.mrao.path =
+        "../../textures/substance_grid/mrao.png";
+    sphere4.uniformBufferAndContent.content.modelMatrix =
+        glm::translate(glm::vec3(-1.f, 0.f, 1.f));
+
+    AppSceneObject ground{};
+    ground.meshPath = "../../models/maya_ground.obj";
+    ground.albedo.path =
+        "../../textures/substance_ground/albedo.png";
+    ground.normal.path = "../../textures/substance_ground/normal.png";
+    ground.mrao.path =
+        "../../textures/substance_ground/mrao.png";
+    ground.uniformBufferAndContent.content.modelMatrix =
+        glm::translate(glm::vec3(-1.f, 0.f, 1.f));
+
 
     scene_objects_.push_back(sphere1);
     scene_objects_.push_back(sphere2);
     scene_objects_.push_back(sphere3);
+    scene_objects_.push_back(sphere4);
+    scene_objects_.push_back(ground);
+
 
 
     // the following 2 functions must be called before scene object loading
@@ -4329,7 +4354,7 @@ void VulkanApp::createDeferredCommandBuffer() {
 }
 
 // general =================================================
-void VulkanApp::draw_new() {
+void VulkanApp::draw() {
     //init submit info
     VkPipelineStageFlags waitStages[] = {
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
@@ -4388,27 +4413,42 @@ void VulkanApp::updateUniformBuffers() {
     // scene object positions
     glm::mat4 modelMat;
     
-    modelMat = modelMat = glm::translate(glm::vec3(0.f, 2.f, 0.f));
+    modelMat = glm::translate(glm::vec3(1.f, 0.f, 1.f));
     auto& model0_ubo = scene_objects_[0].uniformBufferAndContent;
     model0_ubo.content.modelMatrix = modelMat;
     uniformBufferCpy(
         model0_ubo.uniformBuffer.deviceMemory,
         &model0_ubo.content, sizeof(model0_ubo.content));
 
-    modelMat = glm::translate(glm::vec3(0.f, -2.f, 0.f));
+    modelMat = glm::translate(glm::vec3(-1.f, 0.f, 1.f));
     auto& model1_ubo = scene_objects_[1].uniformBufferAndContent;
     model1_ubo.content.modelMatrix = modelMat;
     uniformBufferCpy(
         model1_ubo.uniformBuffer.deviceMemory,
         &model1_ubo.content, sizeof(model1_ubo.content));
 
-    modelMat = glm::translate(glm::vec3(2.f, -2.f, 0.f));
+    modelMat = glm::translate(glm::vec3(-1.f, 0.f, -1.f));
     auto& model2_ubo = scene_objects_[2].uniformBufferAndContent;
     model2_ubo.content.modelMatrix = modelMat;
     uniformBufferCpy(
         model2_ubo.uniformBuffer.deviceMemory,
         &model2_ubo.content, sizeof(model2_ubo.content));
-    
+
+    modelMat = glm::translate(glm::vec3(1.f, 0.f, -1.f));
+    auto& model3_ubo = scene_objects_[3].uniformBufferAndContent;
+    model3_ubo.content.modelMatrix = modelMat;
+    uniformBufferCpy(
+        model3_ubo.uniformBuffer.deviceMemory,
+        &model3_ubo.content, sizeof(model3_ubo.content));
+
+    modelMat = glm::scale(glm::vec3(0.5f, 0.5f, 0.5f));
+    modelMat = glm::translate(glm::vec3(0.f, -1.f, 0.f)) * modelMat;
+    auto& model4_ubo = scene_objects_[4].uniformBufferAndContent;
+    model4_ubo.content.modelMatrix = modelMat;
+    uniformBufferCpy(
+        model4_ubo.uniformBuffer.deviceMemory,
+        &model4_ubo.content, sizeof(model4_ubo.content));
+
     // skybox
     auto& skybox_ubo = skybox_.uniformBufferAndContent;
 
@@ -4430,11 +4470,13 @@ void VulkanApp::updateUniformBuffers() {
     lightDir.y = sin(time * 1.f);
     lightDir.z = cos(-time * 1.f);
     deferred_ubo.content.lightPos = lightDir;
-    apputil::printVec3(deferred_ubo.content.eyePos);
 
     uniformBufferCpy(
         deferred_ubo.uniformBuffer.deviceMemory,
         &deferred_ubo.content, sizeof(deferred_ubo.content));
+
+    // ray trace
+    
 }
 
 // helper
