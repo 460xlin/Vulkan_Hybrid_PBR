@@ -8,4 +8,5 @@ This is an alpha version commit. Build configuration and detailed instruction wi
 - [Khronos gltf PBR](https://github.com/KhronosGroup/glTF-WebGL-PBR)
 - [Vulkan Tutorial](https://vulkan-tutorial.com/)
 - [Vulkan Examples](https://github.com/LunarG/VulkanSamples)
+- [tinyobjloader](https://github.com/syoyo/tinyobjloader)
 
