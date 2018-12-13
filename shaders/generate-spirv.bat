@@ -9,4 +9,5 @@ glslangvalidator -V texture.vert -o texture.vert.spv
 glslangvalidator -V raytracing.comp -o raytracing.comp.spv
 glslangvalidator -V skybox.vert -o skybox.vert.spv
 glslangvalidator -V skybox.frag -o skybox.frag.spv
+glslangvalidator -V deferred_shadow.frag -o deferred_shadow.frag.spv
 

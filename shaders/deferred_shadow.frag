@@ -11,7 +11,7 @@
 // #define SHOW_POSITION
 // #define SHOW_MRAO
 // #define DEBUG_RAYTRACE
-// #define USE_SHADOW_MAP
+#define USE_SHADOW_MAP
 
 
 layout (binding = 0) uniform UBO 
@@ -131,6 +131,12 @@ vec3 getIBLContribution(PBRInfo pbrInputs, vec3 n, vec3 reflection)
     diffuse *= u_ScaleIBLAmbient.x;
     specular *= u_ScaleIBLAmbient.y;
 
+#ifdef USE_SHADOW_MAP
+    if (IBLDiffuseShadow > 0.f) {
+        diffuse *= log(IBLDiffuseShadow + 1);
+        specular *= log(IBLSpecularShadow + 1);
+    }
+#endif
     // return specular;
     return diffuse + specular;
 }

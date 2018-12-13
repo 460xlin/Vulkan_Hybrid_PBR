@@ -14,13 +14,19 @@
 #include <gli/gli.hpp>
 #include <glm/gtc/constants.hpp>
 
+#define SHOW_SHADOW_SCENE
+
+// Temp =================================================
+bool tempPushTriangleSwitch = true;
+glm::mat4 tempGlobalModelMatrix = glm::mat4(1.f);
+
 // Timers =================================================
 std::chrono::time_point<std::chrono::steady_clock> START_TIME;
 std::chrono::time_point<std::chrono::steady_clock> LAST_RECORD_TIME;
 float FRAME_GAP_TIME;
 
 #include <glm/gtx/intersect.hpp>
- #define ONLY_RT
+ //#define ONLY_RT
 
 
 void INIT_GLOBAL_TIME() {
@@ -196,7 +202,12 @@ void VulkanApp::initVulkan() {
     setupVertexDescriptions();
     // begin offscreen ==========================================
     // scene objects need offscreen's ubo, so has to be before object
-
+    
+    // start to combine ray tracing to deferred
+    rt_createSema();
+    rt_createUniformBuffers();
+    rt_prepareStorageBuffers();
+    rt_prepareTextureTarget(rt_result, VK_FORMAT_R8G8B8A8_UNORM);
 #ifndef ONLY_RT
     prepareSkybox();
     prepareSceneObjectsData();
@@ -204,13 +215,16 @@ void VulkanApp::initVulkan() {
     // in this prepare offscreen function,
     // we prepare the renderpass and framebuffer 
     // which will be used to create skybox pipeline
+
     prepareOffscreen();
+    rt_prepareCompute();
 
     // because create pipeline need renderpass which now is offscreen.renderpass
     createSkyboxPipeline();
 
     prepareSceneObjectsDescriptor();
     prepareOffscreenCommandBuffer();
+    rt_createComputeCommandBuffer();
     prepareDeferred();
 
 #endif
@@ -240,10 +254,10 @@ void VulkanApp::mainLoop() {
         FRAME_GAP_TIME = GET_CLOBAL_TIME_GAP_SINCE_LAST_RECORD();
         SET_GLOBAL_RECORD_TIME();
 #ifdef ONLY_RT
-        rt_updateUniformBuffer();
         rt_draw();
 #else
         updateUniformBuffers();
+        rt_updateUniformBuffer();
         showFPS();
         draw();
 #endif
@@ -268,7 +282,7 @@ void VulkanApp::cleanup() {
     vkDestroyBuffer(device_, quadVertexBuffer, nullptr);
     vkFreeMemory(device_, quadVertexBufferMemory, nullptr);
 
-    vkDestroySemaphore(device_, offscreen_semaphore_, nullptr);
+    vkDestroySemaphore(device_, offscreen_complete_semaphore_, nullptr);
 
 
     vkDestroyPipelineCache(device_, pipelineCache, nullptr);
@@ -779,7 +793,6 @@ void VulkanApp::loadSingleSceneObjectMesh(AppSceneObject& object_struct) {
     std::string warn, err;
 
 
-
     if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, file_path.c_str())) {
         throw std::runtime_error(warn + err);
     }
@@ -857,6 +870,16 @@ void VulkanApp::loadSingleSceneObjectMesh(AppSceneObject& object_struct) {
                 vertices.push_back(verts[j]);
                 indices.push_back(indices.size());
             }
+
+            if (tempPushTriangleSwitch) {
+                Triangle temp;
+                temp.vert_0 = tempGlobalModelMatrix * glm::vec4(verts[0].pos[0], verts[0].pos[1], verts[0].pos[2], 1.0f);
+                temp.vert_1 = tempGlobalModelMatrix * glm::vec4(verts[1].pos[0], verts[1].pos[1], verts[1].pos[2], 1.0f);
+                temp.vert_2 = tempGlobalModelMatrix * glm::vec4(verts[2].pos[0], verts[2].pos[1], verts[2].pos[2], 1.0f);
+
+                temp.trinormal = glm::vec4(1.0, 0.0, 0.0, 0.0);
+                rt_all_triangles.push_back(temp);
+            }
         }
     }
 
@@ -925,13 +948,13 @@ void VulkanApp::createDescriptorPool() {
     // todo check if all pipelins share the same decriptor pool
     std::array<VkDescriptorPoolSize, 4> poolSizes = {};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    poolSizes[0].descriptorCount = 20;
+    poolSizes[0].descriptorCount = 40;
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = 20;
+    poolSizes[1].descriptorCount = 40;
     poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    poolSizes[2].descriptorCount = 20;
+    poolSizes[2].descriptorCount = 40;
     poolSizes[3].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    poolSizes[3].descriptorCount = 20;
+    poolSizes[3].descriptorCount = 40;
 
 
     VkDescriptorPoolCreateInfo poolInfo = {};
@@ -1456,7 +1479,7 @@ void VulkanApp::rt_createSema()
 	VkSemaphoreCreateInfo semaphoreCreateInfo{};
 	semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-	if (vkCreateSemaphore(device_, &semaphoreCreateInfo, nullptr, &rt_sema) != VK_SUCCESS) {
+	if (vkCreateSemaphore(device_, &semaphoreCreateInfo, nullptr, &rt_complete_sema) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create offscreenSemaphore");
 	}
 }
@@ -1544,12 +1567,6 @@ void VulkanApp::rt_prepareStorageBuffers() {
 
     vkDestroyBuffer(device_, planeStagingBuffer, nullptr);
     vkFreeMemory(device_, planeStagingBufferMemory, nullptr);
-}
-
-void VulkanApp::rt_prepareObjFileBuffer()
-{
-	//compute.rt_scene_obj.meshPath = "../../models/maya_cube.obj";
-	rt_loadObj();
 }
 
 
@@ -1965,7 +1982,19 @@ void VulkanApp::rt_prepareCompute() {
 	rt_uniform_geom.descriptorCount = 1;
 
     std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings = {
-        rt_storage, rt_uniform, rt_sphere, rt_plane, rt_tri, rt_uniform_geom
+        rt_storage, rt_uniform, rt_sphere, rt_plane, rt_tri, rt_uniform_geom,
+        // binding 6: position texture
+          apputil::createDescriptorSetLayoutBinding(
+            6,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            1,
+            VK_SHADER_STAGE_COMPUTE_BIT),
+        // binding 7: normal texture
+         apputil::createDescriptorSetLayoutBinding(
+            7,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            1,
+            VK_SHADER_STAGE_COMPUTE_BIT)
     };
 
     VkDescriptorSetLayoutCreateInfo descriptorLayout{};
@@ -2106,7 +2135,21 @@ void VulkanApp::rt_prepareCompute() {
 		rt_uni_storage_sphere,
 		rt_uni_storage_plane,
 		rt_uni_storage_tri,
-		rt_uni_geom_block
+		rt_uni_geom_block,
+        // binding 6: world position
+        apputil::createImageWriteDescriptorSet(
+            compute_.rt_computeDescriptorSet,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            6,
+            &offscreen_.frameBufferAssets.position.descriptorImageInfo,
+            1),
+        // binding 7: world normal
+        apputil::createImageWriteDescriptorSet(
+            compute_.rt_computeDescriptorSet,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            7,
+            &offscreen_.frameBufferAssets.normal.descriptorImageInfo,
+            1),
     };
 
     vkUpdateDescriptorSets(device_, computeWriteDescriptorSets.size(), computeWriteDescriptorSets.data(), 0, NULL);
@@ -2271,6 +2314,8 @@ void VulkanApp::rt_createRaytraceDisplayCommandBuffer() {
 
 void VulkanApp::rt_draw() {
     //initial submit info
+    mySubmitInfo = {};
+    mySubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
     mySubmitInfo.pWaitDstStageMask = waitStages;
     mySubmitInfo.signalSemaphoreCount = 1;
@@ -2281,13 +2326,12 @@ void VulkanApp::rt_draw() {
         std::numeric_limits<uint64_t>::max(),
         semaphores_.presentComplete,
         VK_NULL_HANDLE, &imageIndex);
-
     
     VkSemaphore waitSemaphores[] = { semaphores_.presentComplete };
     // submit compute
     // wait for swap chian presentation to finish
     mySubmitInfo.pWaitSemaphores = waitSemaphores;
-    mySubmitInfo.pSignalSemaphores = &rt_sema;
+    mySubmitInfo.pSignalSemaphores = &rt_complete_sema;
     mySubmitInfo.commandBufferCount = 1;
     mySubmitInfo.pCommandBuffers = &compute_.rt_computeCmdBuffer;
 
@@ -2297,7 +2341,7 @@ void VulkanApp::rt_draw() {
     }
 
     // wait for offsreen
-    VkSemaphore waitSemaphores_2[] = { rt_sema };
+    VkSemaphore waitSemaphores_2[] = { rt_complete_sema };
     mySubmitInfo.pWaitSemaphores = waitSemaphores_2;
     mySubmitInfo.pSignalSemaphores = &semaphores_.renderComplete;
     mySubmitInfo.pCommandBuffers = &rt_drawCommandBuffer[imageIndex];
@@ -2338,12 +2382,14 @@ void VulkanApp::rt_updateUniformBuffer() {
 	auto currentTime = std::chrono::high_resolution_clock::now();
 	float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count() / 10.f;
 
-	// rt_ubo
 	rt_ubo.lightPos.x = 0.0f + sin(glm::radians(time * 360.0f)) * cos(glm::radians(time * 360.0f)) * 2.0f;
 	rt_ubo.lightPos.y = 0.0f + sin(glm::radians(time * 360.0f)) * 2.0f;
 	rt_ubo.lightPos.z = 0.0f + cos(glm::radians(time * 360.0f)) * 2.0f;
+    rt_ubo.lightPos = deferred_.uniformBufferAndContent.content.lightPos;
 	float camDelta = (int)(time / 1000) % 10;
 	rt_ubo.camera.pos = glm::vec3(camDelta);
+    rt_ubo.camera.pos = firstPersonCam->GetPos();
+    rt_ubo.camera.lookat = firstPersonCam->GetForward();
 
 	void* data;
 	vkMapMemory(device_, rt_uniformBuffers.rt_compute.deviceMem, 0, sizeof(rt_ubo), 0, &data);
@@ -2363,148 +2409,27 @@ void VulkanApp::rt_updateUniformBuffer() {
 	vkUnmapMemory(device_, rt_uniformBuffers.rt_geom.deviceMem);
 }
 
+void VulkanApp::rt_loadObj(std::vector<Triangle>& tri)
+{
+#ifndef SHOW_SHADOW_SCENE
+    Triangle space_holder;
+    tri.clear();
+    tri.push_back(space_holder);
+#endif // SHOW_SHADOW_SCENE
 
-void VulkanApp::rt_loadObj() {
+    
+    VkDeviceSize triBufferSize = sizeof(Triangle) * tri.size();
+    VkBuffer StagingBuffer;
+    VkDeviceMemory StagingBufferMemory;
+    createBuffer(triBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        StagingBuffer, StagingBufferMemory);
 
-    std::string file_path = "../../models/maya_cube.obj";
-
-	std::vector<Triangle> triangles;
-	std::vector<Vertex> vertices;
-	std::vector<uint32_t> indices;
-
-	tinyobj::attrib_t attrib;
-	std::vector<tinyobj::shape_t> shapes;
-	std::vector<tinyobj::material_t> materials;
-	std::string warn, err;
-
-	if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, file_path.c_str())) {
-		throw std::runtime_error(warn + err);
-	}
-
-	for (const auto& shape : shapes) {
-		// +3 for per triangle
-		for (int i = 0; i < shape.mesh.indices.size(); i += 3) {
-			Vertex verts[3];
-			const tinyobj::index_t idx[] = {
-				shape.mesh.indices[i],
-				shape.mesh.indices[i + 1],
-				shape.mesh.indices[i + 2] };
-
-			float colorVul[3];
-			colorVul[0] = 0.0;
-			colorVul[1] = 0.f;
-			colorVul[2] = 0.f;
-
-
-			for (int j = 0; j < 3; ++j) {
-				const auto& index = idx[j];
-				auto& vert = verts[j];
-				vert.pos[0] = attrib.vertices[3 * index.vertex_index + 2];
-				vert.pos[1] = attrib.vertices[3 * index.vertex_index + 1];
-				vert.pos[2] = attrib.vertices[3 * index.vertex_index + 0];
-
-				vert.uv[0] = 1.0f - attrib.texcoords[2 * index.texcoord_index + 0];
-				vert.uv[1] = 1.0f - attrib.texcoords[2 * index.texcoord_index + 1];
-
-				vert.col[0] = colorVul[0];
-				vert.col[1] = colorVul[1];
-				vert.col[2] = colorVul[2];
-
-				vert.normal[0] = attrib.normals[3 * index.normal_index + 2];
-				vert.normal[1] = attrib.normals[3 * index.normal_index + 1];
-				vert.normal[2] = attrib.normals[3 * index.normal_index + 0];
-			}
-
-			// clac tangent
-			// Edges of the triangle : position delta
-			glm::vec3 deltaPos1 = glm::vec3(
-				verts[1].pos[0] - verts[0].pos[0],
-				verts[1].pos[1] - verts[0].pos[1],
-				verts[1].pos[2] - verts[0].pos[2]);
-			glm::vec3 deltaPos2 = glm::vec3(
-				verts[2].pos[0] - verts[0].pos[0],
-				verts[2].pos[1] - verts[0].pos[1],
-				verts[2].pos[2] - verts[0].pos[2]);
-
-			// UV delta
-			glm::vec2 deltaUV1 = glm::vec2(
-				verts[1].uv[0] - verts[0].uv[0],
-				verts[1].uv[1] - verts[0].uv[1]
-			);
-			glm::vec2 deltaUV2 = glm::vec2(
-				verts[2].uv[0] - verts[0].uv[0],
-				verts[2].uv[1] - verts[0].uv[1]
-			);
-
-			float r = 1.0f / (deltaUV1.x*deltaUV2.y - deltaUV1.y*deltaUV2.x);
-			glm::vec3 tangent = r
-				* (deltaPos1 * deltaUV2.y - deltaPos2 * deltaUV1.y);
-
-			// write tangent
-			for (int j = 0; j < 3; ++j) {
-				verts[j].tangent[0] = tangent.x;
-				verts[j].tangent[1] = tangent.y;
-				verts[j].tangent[2] = tangent.z;
-			}
-
-			// push_back
-			//for (int j = 0; j < 3; ++j) {
-			//	vertices.push_back(verts[j]);
-			//	indices.push_back(indices.size());
-			//}
-
-			Triangle temp;
-            temp.vert_0 = glm::vec4(verts[0].pos, 0.0f);
-            temp.vert_1 = glm::vec4(verts[1].pos, 0.0f);
-            temp.vert_2 = glm::vec4(verts[2].pos, 0.0f);
-            temp.trinormal = glm::vec4(1.0, 0.0, 0.0, 0.0);
-
-			triangles.push_back(temp);
-		}
-	}
-
-
-    //test ++++
- //   triangles.clear();
-	//Triangle tri_0{};
-	////tri_0.triverts[0] = vert0;
-	////tri_0.triverts[1] = vert1;
-	////tri_0.triverts[2] = vert2;
- //   // tri_0.triidx = 0.4f;
-
- //   tri_0.testColor[0] = 1.0f;
- //   tri_0.testColor[1] = 0.0f;
- //   tri_0.testColor[2] = 1.0f;
- //   tri_0.trinormal = glm::vec4(0, 1.0f, 1.0f, 1.0f);
- //   tri_0.vert_0 = glm::vec4(0.2, 0.7, 0.2, 0.0);
- //   tri_0.vert_1 = glm::vec4(-2, -2, 2, 0.0);
- //   tri_0.vert_2 = glm::vec4(3, 3, -3, 0.0);
-	//triangles.push_back(tri_0);
-
-	// create vertex buffer for arbitary  model
-	VkDeviceSize triBufferSize = sizeof(Triangle) * triangles.size();
-    triangles;
-    // test ============================================================================== // 
-    std::cout << "==============================================================================" << std::endl;
-
-    std::cout << "Triangles count: " << triangles.size() << std::endl;
-    for (int i = 0; i < triangles.size(); i++)
-    {
-        //std::cout << triangles[i].triverts[0].pos.x << ", " << triangles[i].triverts[0].pos.y << ", " << triangles[i].triverts[0].pos.z << std::endl;
-    }
-    std::cout << "==============================================================================" << std::endl;
-
-	VkBuffer StagingBuffer;
-	VkDeviceMemory StagingBufferMemory;
-	createBuffer(triBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-		StagingBuffer, StagingBufferMemory);
-
-	void* data;
-	vkMapMemory(device_, StagingBufferMemory, 0, triBufferSize, 0,
-		&data);
-	memcpy(data, triangles.data(), (size_t)triBufferSize);
-	vkUnmapMemory(device_, StagingBufferMemory);
+    void* data;
+    vkMapMemory(device_, StagingBufferMemory, 0, triBufferSize, 0,
+        &data);
+    memcpy(data, tri.data(), (size_t)triBufferSize);
+    vkUnmapMemory(device_, StagingBufferMemory);
 
     createBuffer(
         triBufferSize,
@@ -2512,14 +2437,16 @@ void VulkanApp::rt_loadObj() {
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         compute_.myTriBuffer.buffer,
         compute_.myTriBuffer.deviceMem
-	);
+    );
 
-	copyBuffer(StagingBuffer, compute_.myTriBuffer.buffer,
-		triBufferSize);
+    copyBuffer(StagingBuffer, compute_.myTriBuffer.buffer,
+        triBufferSize);
 
-	vkDestroyBuffer(device_, StagingBuffer, nullptr);
-	vkFreeMemory(device_, StagingBufferMemory, nullptr);	
+    vkDestroyBuffer(device_, StagingBuffer, nullptr);
+    vkFreeMemory(device_, StagingBufferMemory, nullptr);
 }
+
+
 
 // ray tracing end  =================================================
 
@@ -2943,6 +2870,61 @@ void VulkanApp::createOffscreenRenderPass() {
 
 // scene objects =================================================
 void VulkanApp::prepareSceneObjectsData() {
+
+    glm::mat4 modelMat;
+    modelMat = glm::scale(glm::vec3(0.7f, 0.7f, 0.7f));
+    modelMat = glm::translate(glm::vec3(0.f, -1.f, 0.f)) * modelMat;
+    std::cout << "MAT4 in Original================" << std::endl;
+    apputil::printMat4(modelMat);
+
+    AppSceneObject ground_shadow{};
+    ground_shadow.meshPath = "../../models/maya_ground.obj";
+    ground_shadow.albedo.path =
+        "../../textures/substance_ground_shadow/albedo.png";
+    ground_shadow.normal.path = "../../textures/substance_ground_shadow/normal.png";
+    ground_shadow.mrao.path =
+        "../../textures/substance_ground_shadow/mrao.png";
+    ground_shadow.uniformBufferAndContent.content.modelMatrix = modelMat;
+
+    AppSceneObject box{};
+    box.meshPath = "../../models/maya_cube_2.obj";
+    box.albedo.path = "../../textures/substance_cube_2_bronze/albedo.png";
+    box.normal.path = "../../textures/substance_cube_2_bronze/normal.png";
+    box.mrao.path =
+        "../../textures/substance_cube_2_bronze/mrao.png";
+    modelMat = glm::scale(glm::vec3(4.0f, 4.0f, 4.0f));
+    modelMat = glm::translate(glm::vec3(0.f, 1.f, 0.f)) * modelMat;
+    box.uniformBufferAndContent.content.modelMatrix = modelMat;
+
+    AppSceneObject box2{};
+    box2.meshPath = "../../models/maya_cube_2.obj";
+    box2.albedo.path = "../../textures/substance_cube_2_shinny/albedo.png";
+    box2.normal.path = "../../textures/substance_cube_2_shinny/normal.png";
+    box2.mrao.path =
+        "../../textures/substance_cube_2_shinny/mrao.png";
+    box2.uniformBufferAndContent.content.modelMatrix =
+        glm::translate(glm::vec3(-1.f, 0.f, 1.f));
+
+    AppSceneObject box3{};
+    box3.meshPath = "../../models/maya_cube_2.obj";
+    box3.albedo.path = "../../textures/substance_cube_2_rust/albedo.png";
+    box3.normal.path = "../../textures/substance_cube_2_rust/normal.png";
+    box3.mrao.path =
+        "../../textures/substance_cube_2_rust/mrao.png";
+    box3.uniformBufferAndContent.content.modelMatrix =
+        glm::translate(glm::vec3(-1.f, 0.f, -1.f));
+
+    AppSceneObject ground{};
+    ground.meshPath = "../../models/maya_ground.obj";
+    ground.albedo.path =
+        "../../textures/substance_ground/albedo.png";
+    ground.normal.path = "../../textures/substance_ground/normal.png";
+    ground.mrao.path =
+        "../../textures/substance_ground/mrao.png";
+    modelMat = glm::scale(glm::vec3(0.7f, 0.7f, 0.7f));
+    modelMat = glm::translate(glm::vec3(0.f, -1.f, 0.f)) * modelMat;
+    ground.uniformBufferAndContent.content.modelMatrix = modelMat;
+
     AppSceneObject sphere1{};
     sphere1.meshPath = "../../models/substance_sphere.obj";
     sphere1.albedo.path = "../../textures/substance_bronze/albedo.png";
@@ -2982,32 +2964,33 @@ void VulkanApp::prepareSceneObjectsData() {
     sphere4.uniformBufferAndContent.content.modelMatrix =
         glm::translate(glm::vec3(-1.f, 0.f, 1.f));
 
-    AppSceneObject ground{};
-    ground.meshPath = "../../models/maya_ground.obj";
-    ground.albedo.path =
-        "../../textures/substance_ground/albedo.png";
-    ground.normal.path = "../../textures/substance_ground/normal.png";
-    ground.mrao.path =
-        "../../textures/substance_ground/mrao.png";
-    ground.uniformBufferAndContent.content.modelMatrix =
-        glm::translate(glm::vec3(-1.f, 0.f, 1.f));
-
-
+#ifdef SHOW_SHADOW_SCENE
+    scene_objects_.push_back(ground_shadow);
+    scene_objects_.push_back(box);
+    /*scene_objects_.push_back(box2);
+    scene_objects_.push_back(box3);*/
+#else
+    scene_objects_.push_back(ground);
     scene_objects_.push_back(sphere1);
     scene_objects_.push_back(sphere2);
     scene_objects_.push_back(sphere3);
     scene_objects_.push_back(sphere4);
-    scene_objects_.push_back(ground);
+#endif // SHOW_SHADOW_SCENE
 
 
-
+    
+    
+    
     // the following 2 functions must be called before scene object loading
     // scene object descriptor set requires offscreen uniform buffer and
     // descriptor set layout
     // createOffscreenDescriptorSetLayout()
     // createOffscreenUniformBuffer()
 
+    rt_all_triangles.clear();
     for (auto& scene_object : scene_objects_) {
+        tempGlobalModelMatrix =
+            scene_object.uniformBufferAndContent.content.modelMatrix;
         loadSingleSceneObjectMesh(scene_object);
         // texture
         // loadSceneObjectTexture(scene_object);
@@ -3017,6 +3000,8 @@ void VulkanApp::prepareSceneObjectsData() {
         // uniform buffer
         createModelMatrixUniformBuffer(scene_object);
     }
+    // ray tracing 
+    rt_loadObj(rt_all_triangles);
 }
 
 void VulkanApp::prepareSceneObjectsDescriptor() {
@@ -3202,8 +3187,6 @@ void VulkanApp::createModelMatrixUniformBuffer(AppSceneObject& scene_object) {
         scene_object.uniformBufferAndContent.uniformBuffer.buffer;
     buffer_info.offset = 0;
     buffer_info.range = VK_WHOLE_SIZE;
-
-    scene_object.uniformBufferAndContent.content.modelMatrix = glm::mat4(1.f);
 }   
 
 // cubemap =================================================
@@ -3528,8 +3511,14 @@ void VulkanApp::prepareSkyboxTexture()
 }
 
 void VulkanApp::loadSkyboxMesh() {
+
+
+    tempPushTriangleSwitch = false;
     skybox_.skyBoxCube.mesh.meshPath = "../../models/maya_cube.obj";
     loadSingleSceneObjectMesh(skybox_.skyBoxCube.mesh);
+#ifdef SHOW_SHADOW_SCENE
+    tempPushTriangleSwitch = true;
+#endif // SHOW_SHADOW_SCENE
 }
 
 void VulkanApp::createSkyboxUniformBuffer() {
@@ -3992,6 +3981,12 @@ void VulkanApp::createDeferredDescriptorSetLayout() {
             6,
             VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
             1,
+            VK_SHADER_STAGE_FRAGMENT_BIT),
+        // binding 7: result of ray tracing texture
+        apputil::createDescriptorSetLayoutBinding(
+            7,
+            VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            1,
             VK_SHADER_STAGE_FRAGMENT_BIT)
     };
 
@@ -4018,6 +4013,21 @@ void VulkanApp::createDeferredDescriptorSet() {
         != VK_SUCCESS) {
         throw std::runtime_error("failed to allocate deferred_.descriptorSet!");
     }
+
+    // binding 7 start =====================================
+    VkDescriptorImageInfo rt_imageInfo{};
+    rt_imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+    rt_imageInfo.imageView = rt_result.textureImageView;
+    rt_imageInfo.sampler = rt_result.textureSampler;
+
+    VkWriteDescriptorSet binding7WriteSet{};
+    binding7WriteSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    binding7WriteSet.dstSet = deferred_.descriptorSet;
+    binding7WriteSet.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    binding7WriteSet.dstBinding = 7;
+    binding7WriteSet.pImageInfo = &rt_imageInfo;
+    binding7WriteSet.descriptorCount = 1;
+    // end =====================================
 
     // update this descriptorSet
     std::vector<VkWriteDescriptorSet> write_sets = {
@@ -4070,7 +4080,9 @@ void VulkanApp::createDeferredDescriptorSet() {
             VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
             6,
             &deferred_.pbrTextures.brdfLUT.texture.descriptorImageInfo,
-            1)
+            1),
+        // binding 7: ray tracing result
+        binding7WriteSet
     };
 
     vkUpdateDescriptorSets(device_, static_cast<uint32_t>(write_sets.size()),
@@ -4241,9 +4253,18 @@ void VulkanApp::createDeferredPipeline() {
     shaderStages[0] = loadShader(
         "../../shaders/deferred.vert.spv",
         VK_SHADER_STAGE_VERTEX_BIT);
+#ifdef SHOW_SHADOW_SCENE
+    shaderStages[1] = loadShader(
+        "../../shaders/deferred_shadow.frag.spv",
+        VK_SHADER_STAGE_FRAGMENT_BIT);
+#else
     shaderStages[1] = loadShader(
         "../../shaders/deferred_pbr.frag.spv",
         VK_SHADER_STAGE_FRAGMENT_BIT);
+#endif
+    
+
+    
 
     VkGraphicsPipelineCreateInfo pipelineCreateInfo{};
     pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -4355,38 +4376,51 @@ void VulkanApp::createDeferredCommandBuffer() {
 
 // general =================================================
 void VulkanApp::draw() {
-    //init submit info
-    VkPipelineStageFlags waitStages[] = {
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-    };
-
-    VkSemaphore waitSemaphores[] = { semaphores_.presentComplete };
-
-    mySubmitInfo.pWaitDstStageMask = waitStages;
-    mySubmitInfo.signalSemaphoreCount = 1;
-    mySubmitInfo.waitSemaphoreCount = 1;
-    // wait for swap chian presentation to finish
-    mySubmitInfo.pWaitSemaphores = waitSemaphores;
-    mySubmitInfo.pSignalSemaphores = &offscreen_semaphore_;
-    mySubmitInfo.commandBufferCount = 1;
-    mySubmitInfo.pCommandBuffers = &offscreen_.commandBuffer;
-
+    // acuire image
     uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(device_, swapchain_,
         std::numeric_limits<uint64_t>::max(),
         semaphores_.presentComplete,
         VK_NULL_HANDLE, &imageIndex);
 
-    // todo set wait semaphores and signal semaphores
+    // submit offscreen
+    VkPipelineStageFlags waitStages[] = {
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+    };
+
+    VkSemaphore waitSemaphores[] = { semaphores_.presentComplete };
+    VkSemaphore signalSemaphores[] = { offscreen_complete_semaphore_};
+    mySubmitInfo.pWaitDstStageMask = waitStages;
+    mySubmitInfo.waitSemaphoreCount = 1;
+    mySubmitInfo.pWaitSemaphores = waitSemaphores;
+    mySubmitInfo.signalSemaphoreCount = 1;
+    mySubmitInfo.pSignalSemaphores = signalSemaphores;
+    mySubmitInfo.commandBufferCount = 1;
+    mySubmitInfo.pCommandBuffers = &offscreen_.commandBuffer;
+    
     if (vkQueueSubmit(queue_, 1, &mySubmitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
     {
         throw std::runtime_error("failed to submit queue 1");
     }
 
-    // wait for offsreen
-    VkSemaphore waitSemaphores_2[] = { offscreen_semaphore_ };
-    mySubmitInfo.pWaitSemaphores = waitSemaphores_2;
+    // submit rt compute
+    mySubmitInfo.waitSemaphoreCount = 1;
+    mySubmitInfo.pWaitSemaphores = &offscreen_complete_semaphore_;
+    mySubmitInfo.signalSemaphoreCount = 1;
+    mySubmitInfo.pSignalSemaphores = &rt_complete_sema;
+    mySubmitInfo.commandBufferCount = 1;
+    mySubmitInfo.pCommandBuffers = &compute_.rt_computeCmdBuffer;
+    if (vkQueueSubmit(queue_, 1, &mySubmitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
+    {
+        throw std::runtime_error("failed to submit compute_.rt_computeCmdBuffer");
+    }
+
+    // submit deferred
+    mySubmitInfo.waitSemaphoreCount = 1;
+    mySubmitInfo.pWaitSemaphores = &rt_complete_sema;
+    mySubmitInfo.signalSemaphoreCount = 1;
     mySubmitInfo.pSignalSemaphores = &semaphores_.renderComplete;
+    mySubmitInfo.commandBufferCount = 1;
     mySubmitInfo.pCommandBuffers = &deferred_command_buffers_[imageIndex];
     if (vkQueueSubmit(queue_, 1, &mySubmitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
     {
@@ -4399,7 +4433,6 @@ void VulkanApp::draw() {
 
 void VulkanApp::updateUniformBuffers() {
     float time = GET_CLOBAL_TIME_GAP_SINCE_START();
-    
 
     // offscreen camera
     auto& ocs_ubo = offscreen_.uniformBufferAndContent.content;
@@ -4412,43 +4445,54 @@ void VulkanApp::updateUniformBuffers() {
         &ocs_ubo, sizeof(ocs_ubo));   
 
     // scene object positions
+    auto& ground_ubo = scene_objects_[0].uniformBufferAndContent;
+    uniformBufferCpy(
+        ground_ubo.uniformBuffer.deviceMemory,
+        &ground_ubo.content, sizeof(ground_ubo.content));
+#ifdef SHOW_SHADOW_SCENE
     glm::mat4 modelMat;
+    modelMat = glm::scale(glm::vec3(4.0f, 4.0f, 4.0f));
+    modelMat = glm::translate(glm::vec3(0.f, 1.f, 0.f)) * modelMat;
+    auto& box_ubo = scene_objects_[1].uniformBufferAndContent;
+    box_ubo.content.modelMatrix = modelMat;
+    uniformBufferCpy(
+        box_ubo.uniformBuffer.deviceMemory,
+        &box_ubo.content, sizeof(box_ubo.content));
+
+    //auto& box2_ubo = scene_objects_[2].uniformBufferAndContent;
+    //uniformBufferCpy(
+    //    box2_ubo.uniformBuffer.deviceMemory,
+    //    &box2_ubo.content, sizeof(box2_ubo.content));
+
+    //auto& box3_ubo = scene_objects_[3].uniformBufferAndContent;
+    //uniformBufferCpy(
+    //    box3_ubo.uniformBuffer.deviceMemory,
+    //    &box3_ubo.content, sizeof(box3_ubo.content));
+#else
+    auto& sphere1_ubo = scene_objects_[1].uniformBufferAndContent;
+    uniformBufferCpy(
+        sphere1_ubo.uniformBuffer.deviceMemory,
+        &sphere1_ubo.content, sizeof(sphere1_ubo.content));
+
+    auto& sphere2_ubo = scene_objects_[2].uniformBufferAndContent;
+    uniformBufferCpy(
+        sphere2_ubo.uniformBuffer.deviceMemory,
+        &sphere2_ubo.content, sizeof(sphere2_ubo.content));
+
+    auto& sphere3_ubo = scene_objects_[3].uniformBufferAndContent;
+    uniformBufferCpy(
+        sphere3_ubo.uniformBuffer.deviceMemory,
+        &sphere3_ubo.content, sizeof(sphere3_ubo.content));
+
+    auto& sphere4_ubo = scene_objects_[4].uniformBufferAndContent;
+    uniformBufferCpy(
+        sphere4_ubo.uniformBuffer.deviceMemory,
+        &sphere4_ubo.content, sizeof(sphere4_ubo.content));
+#endif // SHOW_SHADOW_SCENE
+
     
-    modelMat = glm::translate(glm::vec3(1.f, 0.f, 1.f));
-    auto& model0_ubo = scene_objects_[0].uniformBufferAndContent;
-    model0_ubo.content.modelMatrix = modelMat;
-    uniformBufferCpy(
-        model0_ubo.uniformBuffer.deviceMemory,
-        &model0_ubo.content, sizeof(model0_ubo.content));
-
-    modelMat = glm::translate(glm::vec3(-1.f, 0.f, 1.f));
-    auto& model1_ubo = scene_objects_[1].uniformBufferAndContent;
-    model1_ubo.content.modelMatrix = modelMat;
-    uniformBufferCpy(
-        model1_ubo.uniformBuffer.deviceMemory,
-        &model1_ubo.content, sizeof(model1_ubo.content));
-
-    modelMat = glm::translate(glm::vec3(-1.f, 0.f, -1.f));
-    auto& model2_ubo = scene_objects_[2].uniformBufferAndContent;
-    model2_ubo.content.modelMatrix = modelMat;
-    uniformBufferCpy(
-        model2_ubo.uniformBuffer.deviceMemory,
-        &model2_ubo.content, sizeof(model2_ubo.content));
-
-    modelMat = glm::translate(glm::vec3(1.f, 0.f, -1.f));
-    auto& model3_ubo = scene_objects_[3].uniformBufferAndContent;
-    model3_ubo.content.modelMatrix = modelMat;
-    uniformBufferCpy(
-        model3_ubo.uniformBuffer.deviceMemory,
-        &model3_ubo.content, sizeof(model3_ubo.content));
-
-    modelMat = glm::scale(glm::vec3(0.5f, 0.5f, 0.5f));
-    modelMat = glm::translate(glm::vec3(0.f, -1.f, 0.f)) * modelMat;
-    auto& model4_ubo = scene_objects_[4].uniformBufferAndContent;
-    model4_ubo.content.modelMatrix = modelMat;
-    uniformBufferCpy(
-        model4_ubo.uniformBuffer.deviceMemory,
-        &model4_ubo.content, sizeof(model4_ubo.content));
+        
+    
 
     // skybox
     auto& skybox_ubo = skybox_.uniformBufferAndContent;
@@ -4464,13 +4508,13 @@ void VulkanApp::updateUniformBuffers() {
     // deferred
     auto& deferred_ubo = deferred_.uniformBufferAndContent;
     deferred_ubo.content.eyePos = firstPersonCam->GetPos();
-    deferred_ubo.content.modelView =
-        model0_ubo.content.modelMatrix * firstPersonCam->GetView();
-    glm::vec3 lightDir;
-    lightDir.x = cos(time * 1.f);
-    lightDir.y = sin(time * 1.f);
-    lightDir.z = cos(-time * 1.f);
-    deferred_ubo.content.lightPos = lightDir;
+    glm::vec3 lightPos;
+    lightPos.x = cos(time * 1.f);
+    lightPos.y = sin(time * 1.f);
+    lightPos.z = cos(-time * 1.f);
+    lightPos *= 10.f;
+
+    deferred_ubo.content.lightPos = lightPos;
 
     uniformBufferCpy(
         deferred_ubo.uniformBuffer.deviceMemory,
@@ -4533,7 +4577,7 @@ void VulkanApp::createOffscreenForSkyboxAndModel() {
 	VkSemaphoreCreateInfo semaphoreCreateInfo{};
 	semaphoreCreateInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-	if (vkCreateSemaphore(device_, &semaphoreCreateInfo, nullptr, &offscreen_semaphore_) != VK_SUCCESS) {
+	if (vkCreateSemaphore(device_, &semaphoreCreateInfo, nullptr, &offscreen_complete_semaphore_) != VK_SUCCESS) {
 		throw std::runtime_error("failed to create offscreenSemaphore");
 	}
 

@@ -72,11 +72,9 @@ struct DeferredUniformBufferObject {
 struct RTUniformBufferObject {							// Compute shader uniform block object
     glm::vec3 lightPos = glm::vec3(0.f, 0.f, 0.f);
     float aspectRatio = 1.333f;						// Aspect ratio of the viewport
-    glm::vec4 fogColor = glm::vec4(0.0f);
     struct {
         glm::vec3 pos = glm::vec3(0.0f, 0.0f, 4.0f);
         glm::vec3 lookat = glm::vec3(0.0f, 0.5f, 0.0f);
-        float fov = 10.0f;
     } camera;
 };
 
@@ -271,7 +269,6 @@ private:
 	void rt_createSema();
 	void rt_createUniformBuffers();
     void rt_prepareStorageBuffers();
-	void rt_prepareObjFileBuffer();
 	void rt_prepareTextureTarget(MyTexture& tex, VkFormat format, uint32_t width = WIDTH, uint32_t height = HEIGHT);
 	void rt_graphics_setupDescriptorSetLayout();
 	void rt_graphics_setupDescriptorSet();
@@ -288,14 +285,16 @@ private:
     Sphere newSphere(glm::vec3 pos, float radius, glm::vec3 diffuse, float specular);
     Plane newPlane(glm::vec3 normal, float distance, glm::vec3 diffuse, float specular);
 	void rt_updateUniformBuffer();
-	void rt_loadObj();
+    void rt_loadObj(std::vector<Triangle>&);
+    std::vector<Triangle> rt_all_triangles;
+
 
 	uint32_t rt_currentId = 0;
 	MyTexture rt_result;
 	RTUniformBufferObject rt_ubo;
 	RT_GEOM rt_g;
 	std::vector<VkCommandBuffer> rt_drawCommandBuffer;
-	VkSemaphore rt_sema;
+	VkSemaphore rt_complete_sema;
 
 
     // todo: ray tracing part share the same queue with whom???????
@@ -338,7 +337,7 @@ private:
 
     // offscreen =================================================
     AppOffscreenPipelineAssets offscreen_;
-    VkSemaphore offscreen_semaphore_ = VK_NULL_HANDLE;
+    VkSemaphore offscreen_complete_semaphore_ = VK_NULL_HANDLE;
     void prepareOffscreen();
     void prepareOffscreenCommandBuffer();
     void createOffscreenUniformBuffer();

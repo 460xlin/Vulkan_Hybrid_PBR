@@ -94,4 +94,15 @@ namespace apputil {
     void printVec3(const glm::vec3& vector) {
         std::cout << vector.x << " " << vector.y << " " << vector.z << std::endl;
     }
+
+    void printMat4(const glm::mat4& mat) {
+        std::cout << "MAT4----------------" << std::endl;
+        for (int i = 0; i < 4; ++i) {
+            std::cout << std::endl;
+            for (int j = 0; j < 4; ++j) {
+                std::cout << mat[i][j] << " ";
+            }
+        }
+        std::cout << "MAT4----------------" << std::endl;
+    }
 }
